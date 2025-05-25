@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3000/annees';
+const API_URL = 'http://localhost:3000/annees-scolaires'; // Correction ici
 
 export interface AnneeData {
   id: number;

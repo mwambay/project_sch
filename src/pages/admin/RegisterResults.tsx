@@ -5,6 +5,7 @@ import { SchoolService, SchoolData } from '../../api/School.service';
 import { ClasseService, ClasseData } from '../../api/Classe.service';
 import { OptionService, OptionData } from '../../api/Option.service';
 import { ResultatService } from '../../api/Resultat.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
 
 interface Student {
   id: string;
@@ -17,7 +18,7 @@ function RegisterResults() {
   const [school, setSchool] = useState('');
   const [schoolClass, setSchoolClass] = useState('');
   const [option, setOption] = useState('');
-  const [year, setYear] = useState('2024');
+  const [year, setYear] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
   const [newGender, setNewGender] = useState('M');
   const [newAverage, setNewAverage] = useState('');
@@ -28,13 +29,17 @@ function RegisterResults() {
   const [schools, setSchools] = useState<SchoolData[]>([]);
   const [classes, setClasses] = useState<ClasseData[]>([]);
   const [options, setOptions] = useState<OptionData[]>([]);
-  const years = ['2020', '2021', '2022', '2023', '2024'];
+  const [annees, setAnnees] = useState<AnneeData[]>([]);
 
   useEffect(() => {
     // Charger les listes déroulantes depuis l'API
     SchoolService.getAllSchools().then(setSchools);
     ClasseService.getAllClasses().then(setClasses);
     OptionService.getAllOptions().then(setOptions);
+    AnneeService.getAllAnnees().then(data => {
+      setAnnees(data);
+      if (data.length > 0) setYear(data[data.length - 1].id.toString());
+    });
   }, []);
 
   const addStudent = () => {
@@ -107,7 +112,7 @@ function RegisterResults() {
     setSchool('');
     setSchoolClass('');
     setOption('');
-    setYear('2024');
+    setYear('');
     setStudents([]);
     setIsSubmitted(false);
   };
@@ -204,9 +209,10 @@ function RegisterResults() {
                   onChange={(e) => setYear(e.target.value)}
                   className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 >
-                  {years.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
+                  <option value="">Sélectionner une année</option>
+                  {annees.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.libelle}
                     </option>
                   ))}
                 </select>
