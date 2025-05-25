@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import { CheckCircle } from 'lucide-react';
+import { SchoolService, SchoolData } from '../../api/School.service';
+import { ClasseService, ClasseData } from '../../api/Classe.service';
+import { OptionService, OptionData } from '../../api/Option.service';
+import { ResultatService } from '../../api/Resultat.service';
 
 interface Student {
   id: string;
@@ -14,24 +18,27 @@ function RegisterResults() {
   const [schoolClass, setSchoolClass] = useState('');
   const [option, setOption] = useState('');
   const [year, setYear] = useState('2024');
-  const [students, setStudents] = useState<Student[]>([
-    { id: '1', gender: 'M', average: 78, status: 'Réussi' },
-    { id: '2', gender: 'F', average: 82, status: 'Réussi' },
-    { id: '3', gender: 'M', average: 45, status: 'Échec' },
-  ]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [newGender, setNewGender] = useState('M');
   const [newAverage, setNewAverage] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const schools = ['IT SALAMA', 'SAINT FRANCOIS XAVIER', 'EP KAMALONDO', 'IMARA', 'CFP LIKASI'];
-  const classes = ['6ème', '5ème', '4ème', '3ème', '2nde', '1ère', 'Terminale'];
-  const options = ['Math-Info', 'Biochimie', 'Littérature', 'Sciences Sociales', 'Art'];
+  // Listes dynamiques depuis l'API
+  const [schools, setSchools] = useState<SchoolData[]>([]);
+  const [classes, setClasses] = useState<ClasseData[]>([]);
+  const [options, setOptions] = useState<OptionData[]>([]);
   const years = ['2020', '2021', '2022', '2023', '2024'];
+
+  useEffect(() => {
+    // Charger les listes déroulantes depuis l'API
+    SchoolService.getAllSchools().then(setSchools);
+    ClasseService.getAllClasses().then(setClasses);
+    OptionService.getAllOptions().then(setOptions);
+  }, []);
 
   const addStudent = () => {
     const validationErrors: Record<string, string> = {};
-    
     if (!newAverage) {
       validationErrors.average = 'La moyenne est requise';
     } else {
@@ -40,12 +47,10 @@ function RegisterResults() {
         validationErrors.average = 'La moyenne doit être entre 0 et 100';
       }
     }
-
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
     }
-
     const averageNum = parseFloat(newAverage);
     const newStudent: Student = {
       id: Date.now().toString(),
@@ -53,7 +58,6 @@ function RegisterResults() {
       average: averageNum,
       status: averageNum >= 50 ? 'Réussi' : 'Échec',
     };
-
     setStudents([...students, newStudent]);
     setNewGender('M');
     setNewAverage('');
@@ -64,30 +68,39 @@ function RegisterResults() {
     setStudents(students.filter(student => student.id !== id));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const validationErrors: Record<string, string> = {};
-    
     if (!school) validationErrors.school = 'L\'école est requise';
     if (!schoolClass) validationErrors.class = 'La classe est requise';
     if (!option) validationErrors.option = 'L\'option est requise';
     if (!year) validationErrors.year = 'L\'année est requise';
-    
     if (students.length === 0) {
       validationErrors.students = 'Veuillez ajouter au moins un élève';
     }
-
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
+    // Envoi des résultats à l'API
+    try {
+      for (const student of students) {
+        await ResultatService.createResultat({
+          genre: student.gender,
+          moyenne: student.average,
+          mention: student.status,
+          ecole: Number(school),
+          classe: Number(schoolClass),
+          option: Number(option),
+          annee: Number(year),
+        });
+      }
       setIsSubmitted(true);
       setErrors({});
-    }, 1000);
+    } catch (error) {
+      setErrors({ api: "Erreur lors de l'enregistrement des résultats" });
+    }
   };
 
   const resetForm = () => {
@@ -111,7 +124,7 @@ function RegisterResults() {
             </div>
             <h2 className="text-xl font-semibold text-gray-800 mb-2">Enregistrement réussi</h2>
             <p className="text-gray-600 mb-6 text-center">
-              Le palmarès pour {school}, classe {schoolClass}, option {option}, année {year} a été enregistré avec succès.
+              Le palmarès a été enregistré avec succès.
             </p>
             <button
               onClick={resetForm}
@@ -136,8 +149,8 @@ function RegisterResults() {
                 >
                   <option value="">Sélectionner une école</option>
                   {schools.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                    <option key={s.id} value={s.id}>
+                      {s.nom}
                     </option>
                   ))}
                 </select>
@@ -155,8 +168,8 @@ function RegisterResults() {
                 >
                   <option value="">Sélectionner une classe</option>
                   {classes.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+                    <option key={c.id} value={c.id}>
+                      {c.nom}
                     </option>
                   ))}
                 </select>
@@ -174,8 +187,8 @@ function RegisterResults() {
                 >
                   <option value="">Sélectionner une option</option>
                   {options.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
+                    <option key={o.id} value={o.id}>
+                      {o.nom}
                     </option>
                   ))}
                 </select>
@@ -316,6 +329,7 @@ function RegisterResults() {
               Enregistrer
             </button>
           </div>
+          {errors.api && <p className="mt-4 text-sm text-red-600">{errors.api}</p>}
         </form>
       )}
     </div>
