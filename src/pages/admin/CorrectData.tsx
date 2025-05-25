@@ -1,66 +1,71 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
 import Card from '../../components/Card';
 import DataTable from '../../components/DataTable';
-
-interface ResultData {
-  id: string;
-  school: string;
-  class: string;
-  option: string;
-  year: string;
-  gender: string;
-  average: number;
-  status: string;
-}
+import { ResultatService, ResultatData } from '../../api/Resultat.service';
+import { SchoolService, SchoolData } from '../../api/School.service';
+import { ClasseService, ClasseData } from '../../api/Classe.service';
+import { OptionService, OptionData } from '../../api/Option.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
 
 function CorrectData() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedResult, setSelectedResult] = useState<ResultData | null>(null);
+  const [selectedResult, setSelectedResult] = useState<ResultatData | null>(null);
   const [editedAverage, setEditedAverage] = useState('');
   const [editedGender, setEditedGender] = useState('');
   const [comment, setComment] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [results, setResults] = useState<ResultatData[]>([]);
+  const [schools, setSchools] = useState<SchoolData[]>([]);
+  const [classes, setClasses] = useState<ClasseData[]>([]);
+  const [options, setOptions] = useState<OptionData[]>([]);
+  const [annees, setAnnees] = useState<AnneeData[]>([]);
 
-  // Sample data
-  const mockResults: ResultData[] = [
-    { id: '1', school: 'École A', class: '3ème', option: 'Math-Info', year: '2024', gender: 'M', average: 78, status: 'Réussi' },
-    { id: '2', school: 'École A', class: '3ème', option: 'Math-Info', year: '2024', gender: 'F', average: 82, status: 'Réussi' },
-    { id: '3', school: 'École B', class: 'Terminale', option: 'Biochimie', year: '2024', gender: 'M', average: 45, status: 'Échec' },
-    { id: '4', school: 'École C', class: '4ème', option: 'Littérature', year: '2023', gender: 'F', average: 92, status: 'Réussi' },
-    { id: '5', school: 'École D', class: '1ère', option: 'Sciences Sociales', year: '2023', gender: 'M', average: 65, status: 'Réussi' },
-  ];
+  useEffect(() => {
+    // Charger toutes les données nécessaires
+    ResultatService.getAllResultats().then(setResults);
+    SchoolService.getAllSchools().then(setSchools);
+    ClasseService.getAllClasses().then(setClasses);
+    OptionService.getAllOptions().then(setOptions);
+    AnneeService.getAllAnnees().then(setAnnees);
+  }, []);
 
-  const filteredResults = mockResults.filter(
-    result => 
-      result.school.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      result.class.toLowerCase().includes(searchTerm.toLowerCase())
+  // Helpers pour afficher les labels au lieu des IDs
+  const getSchoolName = (id: number) => schools.find(e => e.id === id)?.nom || '';
+  const getClassName = (id: number) => classes.find(c => c.id === id)?.nom || '';
+  const getOptionName = (id: number) => options.find(o => o.id === id)?.nom || '';
+  const getAnneeLabel = (id: number) => annees.find(a => a.id === id)?.libelle || '';
+
+  const filteredResults = results.filter(
+    result =>
+      getSchoolName(typeof result.ecole === 'object' ? (result.ecole as any).id : Number(result.ecole)).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getClassName(typeof result.classe === 'object' ? (result.classe as any).id : Number(result.classe)).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const columns = [
-    { key: 'school', header: 'École' },
-    { key: 'class', header: 'Classe' },
-    { key: 'option', header: 'Option' },
-    { key: 'year', header: 'Année' },
-    { key: 'gender', header: 'Genre' },
-    { key: 'average', header: 'Moyenne' },
-    { 
-      key: 'status', 
+    { key: 'school', header: 'École', render: (_: any, item: ResultatData) => getSchoolName(typeof item.ecole === 'object' ? (item.ecole as any).id : Number(item.ecole)) },
+    { key: 'class', header: 'Classe', render: (_: any, item: ResultatData) => getClassName(typeof item.classe === 'object' ? (item.classe as any).id : Number(item.classe)) },
+    { key: 'option', header: 'Option', render: (_: any, item: ResultatData) => getOptionName(typeof item.option === 'object' ? (item.option as any).id : Number(item.option)) },
+    { key: 'year', header: 'Année', render: (_: any, item: ResultatData) => getAnneeLabel(typeof item.annee === 'object' ? (item.annee as any).id : Number(item.annee)) },
+    { key: 'genre', header: 'Genre', render: (v: string, item: ResultatData) => item.genre },
+    { key: 'moyenne', header: 'Moyenne', render: (v: number, item: ResultatData) => item.moyenne },
+    {
+      key: 'mention',
       header: 'Statut',
-      render: (value: string) => (
+      render: (value: string, item: ResultatData) => (
         <span
           className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-            value === 'Réussi' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            item.mention === 'Réussi' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
           }`}
         >
-          {value}
+          {item.mention}
         </span>
       )
     },
     {
       key: 'id',
       header: 'Action',
-      render: (_: string, item: ResultData) => (
+      render: (_: string, item: ResultatData) => (
         <button
           onClick={() => handleEdit(item)}
           className="text-blue-600 hover:text-blue-900"
@@ -71,10 +76,10 @@ function CorrectData() {
     }
   ];
 
-  const handleEdit = (result: ResultData) => {
+  const handleEdit = (result: ResultatData) => {
     setSelectedResult(result);
-    setEditedAverage(result.average.toString());
-    setEditedGender(result.gender);
+    setEditedAverage(result.moyenne.toString());
+    setEditedGender(result.genre);
     setComment('');
   };
 
@@ -82,9 +87,22 @@ function CorrectData() {
     setShowConfirmation(true);
   };
 
-  const confirmSave = () => {
-    // In a real app, this would update the database
-    alert("Modifications enregistrées avec succès");
+  const confirmSave = async () => {
+    if (!selectedResult) return;
+    try {
+      await ResultatService.updateResultat(selectedResult.id, {
+        moyenne: Number(editedAverage),
+        genre: editedGender,
+        mention: Number(editedAverage) >= 50 ? 'Réussi' : 'Échec'
+        // Vous pouvez aussi envoyer le commentaire si le backend le gère
+      });
+      // Rafraîchir la liste
+      const updated = await ResultatService.getAllResultats();
+      setResults(updated);
+      alert("Modifications enregistrées avec succès");
+    } catch (e) {
+      alert("Erreur lors de la modification");
+    }
     setSelectedResult(null);
     setShowConfirmation(false);
   };
@@ -123,19 +141,19 @@ function CorrectData() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
               <p className="text-sm font-medium text-gray-500 mb-1">École</p>
-              <p className="font-medium">{selectedResult.school}</p>
+              <p className="font-medium">{getSchoolName(typeof selectedResult.ecole === 'object' ? (selectedResult.ecole as any).id : Number(selectedResult.ecole))}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 mb-1">Classe</p>
-              <p className="font-medium">{selectedResult.class}</p>
+              <p className="font-medium">{getClassName(typeof selectedResult.classe === 'object' ? (selectedResult.classe as any).id : Number(selectedResult.classe))}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 mb-1">Option</p>
-              <p className="font-medium">{selectedResult.option}</p>
+              <p className="font-medium">{getOptionName(typeof selectedResult.option === 'object' ? (selectedResult.option as any).id : Number(selectedResult.option))}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 mb-1">Année</p>
-              <p className="font-medium">{selectedResult.year}</p>
+              <p className="font-medium">{getAnneeLabel(typeof selectedResult.annee === 'object' ? (selectedResult.annee as any).id : Number(selectedResult.annee))}</p>
             </div>
           </div>
           
