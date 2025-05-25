@@ -10,7 +10,8 @@ import {
   TrendingUp, 
   Users,
   BookOpen,
-  GraduationCap
+  GraduationCap,
+  Calendar
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -32,6 +33,7 @@ function Sidebar({ role = 'user' }: SidebarProps) {
           { path: '/admin/manage-schools', label: 'Manage Schools', icon: <School size={20} /> },
           { path: '/admin/manage-options', label: 'Manage Options', icon: <BookOpen size={20} /> },
           { path: '/admin/manage-classes', label: 'Manage Classes', icon: <GraduationCap size={20} /> },
+          { path: '/admin/manage-years', label: 'Manage Years', icon: <Calendar size={20} /> },
         ];
       case 'inspector':
         return [

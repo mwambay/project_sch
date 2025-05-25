@@ -8,6 +8,7 @@ import ManageUsers from './pages/admin/ManageUsers';
 import ManageSchools from './pages/admin/ManageSchools';
 import ManageOptions from './pages/admin/ManageOptions';
 import ManageClasses from './pages/admin/ManageClasses';
+import ManageYears from './pages/admin/ManageYears';
 import InspectorDashboard from './pages/inspector/InspectorDashboard';
 import ViewPerformance from './pages/inspector/ViewPerformance';
 import CompareSchools from './pages/inspector/CompareSchools';
@@ -50,6 +51,7 @@ function App() {
           <Route path="manage-schools" element={<ManageSchools />} />
           <Route path="manage-options" element={<ManageOptions />} />
           <Route path="manage-classes" element={<ManageClasses />} />
+          <Route path="manage-years" element={<ManageYears />} />
         </Route>
 
         {/* Inspector Routes */}
