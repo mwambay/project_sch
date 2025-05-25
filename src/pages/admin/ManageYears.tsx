@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import Card from '../../components/Card';
 import DataTable from '../../components/DataTable';
 import Modal from '../../components/Modal';
@@ -22,6 +23,7 @@ function ManageYears() {
       const data = await AnneeService.getAllAnnees();
       setYears(data);
     } catch (error) {
+      toast.error('Erreur lors du chargement des années');
       console.error('Erreur lors du chargement des années :', error);
     }
   };
@@ -36,31 +38,42 @@ function ManageYears() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const promise = selectedYear
+      ? AnneeService.updateAnnee(selectedYear.id, { libelle: yearLabel })
+      : AnneeService.createAnnee({ libelle: yearLabel });
+
+    toast.promise(promise, {
+      loading: selectedYear ? 'Modification en cours...' : 'Ajout en cours...',
+      success: selectedYear ? 'Année modifiée avec succès' : 'Année ajoutée avec succès',
+      error: "Une erreur s'est produite"
+    });
+
     try {
-      if (selectedYear) {
-        await AnneeService.updateAnnee(selectedYear.id, { libelle: yearLabel });
-        alert('Année modifiée');
-      } else {
-        await AnneeService.createAnnee({ libelle: yearLabel });
-        alert('Année ajoutée');
-      }
+      await promise;
       setShowAddForm(false);
       setSelectedYear(null);
       setYearLabel('');
       fetchYears();
     } catch (error) {
-      alert("Erreur lors de l'enregistrement");
       console.error(error);
     }
   };
 
   const handleDelete = async () => {
     if (confirmDeleteId !== null) {
+      const promise = AnneeService.deleteAnnee(confirmDeleteId);
+
+      toast.promise(promise, {
+        loading: 'Suppression en cours...',
+        success: 'Année supprimée avec succès',
+        error: "Impossible de supprimer cette année (peut-être liée à d'autres données)"
+      });
+
       try {
-        await AnneeService.deleteAnnee(confirmDeleteId);
+        await promise;
         fetchYears();
       } catch (error) {
-        alert("Impossible de supprimer cette année (peut-être liée à d'autres données)");
+        console.error(error);
       } finally {
         setConfirmDeleteId(null);
       }
