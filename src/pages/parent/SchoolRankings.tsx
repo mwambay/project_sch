@@ -1,60 +1,107 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import DataTable from '../../components/DataTable';
 import { MapPin, School, Filter } from 'lucide-react';
-
-interface SchoolData {
-  id: string;
-  name: string;
-  location: string;
-  average: number;
-  successRate: number;
-  mainOption: string;
-  rank: number;
-}
+import { ClasseService, ClasseData } from '../../api/Classe.service';
+import { OptionService, OptionData } from '../../api/Option.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
+import { CalculationService, SchoolRankingData, GlobalStats } from '../../api/Calculation.service';
 
 function SchoolRankings() {
   const [selectedCity, setSelectedCity] = useState('');
+  const [selectedClass, setSelectedClass] = useState('');
   const [selectedOption, setSelectedOption] = useState('');
-  const [sortBy, setSortBy] = useState('rank');
+  const [selectedYear, setSelectedYear] = useState('');
+  const [sortBy, setSortBy] = useState('rang');
+  const [isLoading, setIsLoading] = useState(false);
   
-  // Sample data
+  // États pour les données dynamiques
+  const [classes, setClasses] = useState<ClasseData[]>([]);
+  const [options, setOptions] = useState<OptionData[]>([]);
+  const [years, setYears] = useState<AnneeData[]>([]);
+  const [schools, setSchools] = useState<SchoolRankingData[]>([]);
+  const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
+  
+  // Sample data pour les villes
   const cities = ['Toutes', 'Kolwezi', 'Lubumbashi', 'Likasi', 'Fungurume', 'Kambove'];
-  const options = ['Toutes', 'Math-Info', 'Biochimie', 'Littérature', 'Sciences Sociales', 'Art'];
   
-  // Sample school data
-  const schools: SchoolData[] = [
-    { id: '1', name: 'IT Salama', location: 'Lubumbashi', average: 92, successRate: 96, mainOption: 'Electronique', rank: 1 },
-    { id: '2', name: 'Saint Francois Xavier', location: 'Likasi', average: 86, successRate: 90, mainOption: 'Biochimie', rank: 2 },
-    { id: '3', name: 'École E', location: 'Ville A', average: 84, successRate: 88, mainOption: 'Math-Info', rank: 3 },
-    { id: '4', name: 'École G', location: 'Ville C', average: 83, successRate: 87, mainOption: 'Art', rank: 4 },
-    { id: '5', name: 'École D', location: 'Ville B', average: 82, successRate: 86, mainOption: 'Littérature', rank: 5 },
-    { id: '6', name: 'École B', location: 'Ville D', average: 80, successRate: 85, mainOption: 'Sciences Sociales', rank: 6 },
-    { id: '7', name: 'École F', location: 'Ville E', average: 78, successRate: 82, mainOption: 'Biochimie', rank: 7 },
-    { id: '8', name: 'École H', location: 'Ville A', average: 76, successRate: 80, mainOption: 'Math-Info', rank: 8 },
-    { id: '9', name: 'École I', location: 'Ville C', average: 74, successRate: 78, mainOption: 'Art', rank: 9 },
-    { id: '10', name: 'École J', location: 'Ville B', average: 72, successRate: 76, mainOption: 'Littérature', rank: 10 },
-  ];
+  // Chargement des données de base depuis l'API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Charger les listes déroulantes
+        const [classesData, optionsData, yearsData] = await Promise.all([
+          ClasseService.getAllClasses(),
+          OptionService.getAllOptions(),
+          AnneeService.getAllAnnees()
+        ]);
+        
+        setClasses(classesData);
+        setOptions(optionsData);
+        setYears(yearsData);
+        
+        // Définir l'année par défaut à l'année la plus récente
+        if (yearsData.length > 0) {
+          const latestYear = yearsData[yearsData.length - 1].id.toString();
+          setSelectedYear(latestYear);
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement des données de base:', error);
+      }
+    };
+    
+    fetchData();
+  }, []);
+  
+  // Charger les classements lorsque les filtres changent
+  useEffect(() => {
+    const fetchRankings = async () => {
+      if (!selectedYear) return;
+      
+      setIsLoading(true);
+      try {
+        const rankingsData = await CalculationService.getSchoolRankings(
+          Number(selectedYear),
+          selectedCity === 'Toutes' || selectedCity === '' ? undefined : selectedCity,
+          selectedClass ? Number(selectedClass) : undefined,
+          selectedOption ? Number(selectedOption) : undefined
+        );
 
-  // Filter data based on selection
-  const filteredSchools = schools.filter(school => {
-    if (selectedCity && selectedCity !== 'Toutes' && school.location !== selectedCity) return false;
-    if (selectedOption && selectedOption !== 'Toutes' && school.mainOption !== selectedOption) return false;
-    return true;
-  });
-
-  // Sort data based on selection
-  const sortedSchools = [...filteredSchools].sort((a, b) => {
-    if (sortBy === 'rank') return a.rank - b.rank;
-    if (sortBy === 'average') return b.average - a.average;
-    if (sortBy === 'successRate') return b.successRate - a.successRate;
-    return 0;
-  });
+        console.log('Données de classement récupérées:', rankingsData);
+        
+        // Trier les données selon le critère sélectionné
+        const sortedData = rankingsData.sort((a, b) => {
+          if (sortBy === 'rang') return a.rang - b.rang;
+          if (sortBy === 'moyenne') return b.moyenne - a.moyenne;
+          if (sortBy === 'tauxReussite') return b.tauxReussite - a.tauxReussite;
+          return 0;
+        });
+        
+        setSchools(sortedData);
+        
+        // Charger aussi les statistiques globales
+        const stats = await CalculationService.getGlobalStats(Number(selectedYear));
+        setGlobalStats(stats);
+        
+      } catch (error) {
+        console.error('Erreur lors du chargement des classements:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchRankings();
+  }, [selectedCity, selectedClass, selectedOption, selectedYear, sortBy]);
+  
+  // Vérifier si l'option doit être activée (uniquement pour les classes du secondaire)
+  const isOptionEnabled = selectedClass && ['1ère Secondaire', '2ème Secondaire', '3ème Secondaire', '4ème Secondaire'].includes(
+    classes.find(c => c.id.toString() === selectedClass)?.nom || ''
+  );
 
   // Table columns
   const columns = [
     { 
-      key: 'rank', 
+      key: 'rang', 
       header: 'Rang',
       render: (value: number) => (
         <span
@@ -66,9 +113,9 @@ function SchoolRankings() {
         </span>
       )
     },
-    { key: 'name', header: 'École' },
+    { key: 'nom', header: 'École' },
     { 
-      key: 'location', 
+      key: 'ville', 
       header: 'Localisation',
       render: (value: string) => (
         <span className="flex items-center">
@@ -77,10 +124,10 @@ function SchoolRankings() {
         </span>
       )
     },
-    { key: 'average', header: 'Moyenne' },
-    { key: 'successRate', header: 'Taux de réussite (%)' },
+    { key: 'moyenne', header: 'Moyenne', render: (value: number) => value.toFixed(2) },
+    { key: 'tauxReussite', header: 'Taux de réussite (%)', render: (value: number) => value.toFixed(1) },
     { 
-      key: 'mainOption', 
+      key: 'optionPrincipale', 
       header: 'Option principale',
       render: (value: string) => (
         <span
@@ -103,7 +150,7 @@ function SchoolRankings() {
       <h1 className="text-2xl font-bold text-gray-800">Classement des écoles</h1>
       
       <Card>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Ville
@@ -124,22 +171,71 @@ function SchoolRankings() {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Option et classe
+              Classe
             </label>
             <select
-              value={selectedOption}
-              onChange={(e) => setSelectedOption(e.target.value)}
+              value={selectedClass}
+              onChange={(e) => {
+                setSelectedClass(e.target.value);
+                setSelectedOption(''); // Réinitialiser l'option lors du changement de classe
+              }}
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Toutes les classes</option>
-              {options.filter(o => o !== 'Toutes').map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {classes.map((classe) => (
+                <option key={classe.id} value={classe.id.toString()}>
+                  {classe.nom}
                 </option>
               ))}
             </select>
           </div>
           
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Option
+            </label>
+            <select
+              value={selectedOption}
+              onChange={(e) => setSelectedOption(e.target.value)}
+              disabled={!isOptionEnabled}
+              className={`w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                !isOptionEnabled ? 'bg-gray-100 cursor-not-allowed' : ''
+              }`}
+            >
+              <option value="">Toutes les options</option>
+              {options.map((option) => (
+                <option key={option.id} value={option.id.toString()}>
+                  {option.nom}
+                </option>
+              ))}
+            </select>
+            {!isOptionEnabled && selectedClass && (
+              <p className="text-xs text-gray-500 mt-1">
+                Options disponibles uniquement pour le secondaire
+              </p>
+            )}
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Année scolaire
+            </label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Toutes les années</option>
+              {years.map((year) => (
+                <option key={year.id} value={year.id.toString()}>
+                  {year.libelle}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-6 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Trier par
@@ -149,13 +245,36 @@ function SchoolRankings() {
               onChange={(e) => setSortBy(e.target.value)}
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="rank">Classement</option>
-              <option value="average">Moyenne</option>
-              <option value="successRate">Taux de réussite</option>
+              <option value="rang">Classement</option>
+              <option value="moyenne">Moyenne</option>
+              <option value="tauxReussite">Taux de réussite</option>
             </select>
           </div>
         </div>
       </Card>
+      
+      {globalStats && (
+        <Card title="Statistiques générales">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h4 className="text-sm font-medium text-gray-500 mb-1">Moyenne générale</h4>
+              <p className="text-2xl font-bold text-blue-800">{globalStats.moyenneGenerale.toFixed(2)}</p>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg">
+              <h4 className="text-sm font-medium text-gray-500 mb-1">Taux de réussite global</h4>
+              <p className="text-2xl font-bold text-green-800">{globalStats.tauxReussiteGlobal.toFixed(1)}%</p>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <h4 className="text-sm font-medium text-gray-500 mb-1">Nombre d'écoles</h4>
+              <p className="text-2xl font-bold text-purple-800">{globalStats.nombreEcoles}</p>
+            </div>
+            <div className="bg-yellow-50 p-4 rounded-lg">
+              <h4 className="text-sm font-medium text-gray-500 mb-1">Nombre d'élèves</h4>
+              <p className="text-2xl font-bold text-yellow-800">{globalStats.nombreEleves}</p>
+            </div>
+          </div>
+        </Card>
+      )}
       
       <Card>
         <div className="bg-gray-50 p-4 rounded-lg mb-6 flex items-center space-x-3">
@@ -163,20 +282,35 @@ function SchoolRankings() {
           <div>
             <h3 className="font-medium">Résultats filtrés</h3>
             <p className="text-sm text-gray-600">
-              Affichage de {sortedSchools.length} écoles
+              Affichage de {schools.length} écoles
               {selectedCity && selectedCity !== 'Toutes' ? ` à ${selectedCity}` : ''}
-              {selectedOption && selectedOption !== 'Toutes' ? ` avec l'option ${selectedOption}` : ''}
-              {sortBy === 'rank' ? ' triées par classement' : 
-               sortBy === 'average' ? ' triées par moyenne' : 
+              {selectedClass ? ` pour la classe de ${classes.find(c => c.id.toString() === selectedClass)?.nom || ''}` : ''}
+              {isOptionEnabled && selectedOption ? ` avec l'option ${options.find(o => o.id.toString() === selectedOption)?.nom || ''}` : ''}
+              {selectedYear ? ` pour l'année ${years.find(y => y.id.toString() === selectedYear)?.libelle || ''}` : ''}
+              {sortBy === 'rang' ? ' triées par classement' : 
+               sortBy === 'moyenne' ? ' triées par moyenne' : 
                ' triées par taux de réussite'}
             </p>
           </div>
         </div>
         
-        <DataTable
-          columns={columns}
-          data={sortedSchools}
-        />
+        {isLoading ? (
+          <div className="py-12 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+            <p className="mt-2 text-gray-600">Chargement des données...</p>
+          </div>
+        ) : schools.length > 0 ? (
+          <DataTable
+            columns={columns}
+            data={schools}
+          />
+        ) : (
+          <div className="py-12 text-center text-gray-500">
+            <School size={48} className="mx-auto mb-4 text-gray-300" />
+            <p>Aucune école ne correspond aux critères sélectionnés.</p>
+            <p className="text-sm mt-2">Essayez de modifier vos filtres pour voir plus de résultats.</p>
+          </div>
+        )}
       </Card>
       
       <Card title="Comment est calculé le classement ?">

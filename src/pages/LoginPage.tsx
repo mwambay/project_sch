@@ -5,11 +5,11 @@ import { useUser } from '../context/UserContext';
 
 // Mock user data
 const MOCK_USERS = [
-  { id: '1', name: 'Admin User', email: 'admin@example.com', password: 'admin123', role: 'admin' },
-  { id: '2', name: 'Inspector User', email: 'inspector@example.com', password: 'inspector123', role: 'inspector' },
-  { id: '3', name: 'Director User', email: 'director@example.com', password: 'director123', role: 'director' },
-  { id: '4', name: 'Parent User', email: 'parent@example.com', password: 'parent123', role: 'parent' },
-  { id: '5', name: 'Student User', email: 'student@example.com', password: 'student123', role: 'student' },
+  { id: '1', name: 'Admin User', email: 'admin@example.com', password: 'a', role: 'admin' },
+  { id: '2', name: 'Inspector User', email: 'inspector@example.com', password: 'a', role: 'inspector' },
+  { id: '3', name: 'Director User', email: 'director@example.com', password: 'a', role: 'director' },
+  { id: '4', name: 'Parent User', email: 'parent@example.com', password: 'a', role: 'parent' },
+  { id: '5', name: 'Student User', email: 'student@example.com', password: 'a', role: 'student' },
 ];
 
 interface LoginPageProps {

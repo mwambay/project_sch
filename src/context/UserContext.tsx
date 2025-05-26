@@ -6,7 +6,6 @@ interface User {
   email: string;
   role: string;
 }
-
 interface UserContextType {
   user: User | null;
   setUser: (user: User | null) => void;
