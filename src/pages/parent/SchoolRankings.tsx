@@ -497,3 +497,5 @@ function SchoolRankings() {
 }
 
 export default SchoolRankings;
+
+export default SchoolRankings
