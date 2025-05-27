@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import DataTable from '../../components/DataTable';
-import { MapPin, School, Filter, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { MapPin, School, Filter, ChevronDown, ChevronUp, Sparkles, Search } from 'lucide-react';
 import { ClasseService, ClasseData } from '../../api/Classe.service';
 import { OptionService, OptionData } from '../../api/Option.service';
 import { AnneeService, AnneeData } from '../../api/Annee.service';
 import { CalculationService, SchoolRankingData, GlobalStats } from '../../api/Calculation.service';
-import { GeminiService, GeminiFilters } from '../../api/Gemini.service'; // <-- Ajout
+import { GeminiService, GeminiFilters } from '../../api/Gemini.service';
 
 function SchoolRankings() {
   const [selectedCity, setSelectedCity] = useState('');
@@ -16,27 +16,24 @@ function SchoolRankings() {
   const [sortBy, setSortBy] = useState('rang');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Filtres avancés
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState('');
 
-  // IA recherche naturelle
   const [showSmartSearch, setShowSmartSearch] = useState(false);
   const [smartQuery, setSmartQuery] = useState('');
   const [isSmartLoading, setIsSmartLoading] = useState(false);
   const [smartError, setSmartError] = useState('');
 
-  // Données dynamiques
   const [classes, setClasses] = useState<ClasseData[]>([]);
   const [options, setOptions] = useState<OptionData[]>([]);
   const [years, setYears] = useState<AnneeData[]>([]);
   const [schools, setSchools] = useState<SchoolRankingData[]>([]);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
 
-  // Villes
+  const [showWaveAnimation, setShowWaveAnimation] = useState(false);
+
   const cities = ['Toutes', 'Kolwezi', 'Lubumbashi', 'Likasi', 'Fungurume', 'Kambove'];
 
-  // Chargement des données de base
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -59,7 +56,6 @@ function SchoolRankings() {
     fetchData();
   }, []);
 
-  // Chargement des classements et stats selon les filtres
   useEffect(() => {
     const fetchRankingsAndStats = async () => {
       if (!selectedYear) return;
@@ -73,7 +69,6 @@ function SchoolRankings() {
           selectedGenre ? selectedGenre : undefined
         );
 
-        // Tri
         const sortedData = rankingsData.sort((a, b) => {
           if (sortBy === 'rang') return a.rang - b.rang;
           if (sortBy === 'moyenne') return b.moyenne - a.moyenne;
@@ -83,7 +78,6 @@ function SchoolRankings() {
 
         setSchools(sortedData);
 
-        // Statistiques globales
         const stats = await CalculationService.getGlobalStats(Number(selectedYear));
         if (selectedCity && selectedCity !== 'Toutes') {
           if (sortedData.length > 0) {
@@ -120,12 +114,10 @@ function SchoolRankings() {
     fetchRankingsAndStats();
   }, [selectedCity, selectedClass, selectedOption, selectedYear, sortBy, selectedGenre]);
 
-  // Option activée seulement pour le secondaire
   const isOptionEnabled = selectedClass && ['1ère Secondaire', '2ème Secondaire', '3ème Secondaire', '4ème Secondaire'].includes(
     classes.find(c => c.id.toString() === selectedClass)?.nom || ''
   );
 
-  // Colonnes du tableau
   const columns = [
     {
       key: 'rang',
@@ -172,15 +164,15 @@ function SchoolRankings() {
     },
   ];
 
-  // Remplace la fonction handleSmartSearch par l'appel réel à Gemini
   const handleSmartSearch = async () => {
     setIsSmartLoading(true);
     setSmartError('');
     try {
+      setShowWaveAnimation(true);
+      
       const filters: GeminiFilters = await GeminiService.getFilters(smartQuery);
       console.log("Filtres générés par Gemini:", filters);
 
-      // Applique les filtres retournés par Gemini
       setSelectedCity(filters.ville || '');
       setSelectedGenre(filters.genre || '');
       setSelectedYear(
@@ -198,10 +190,15 @@ function SchoolRankings() {
           ? options.find(o => o.nom.toLowerCase().includes(filters.option.toLowerCase()))?.id?.toString() || ''
           : ''
       );
-      setShowSmartSearch(false);
-      setSmartQuery('');
+
+      setTimeout(() => {
+        setShowWaveAnimation(false);
+        setShowSmartSearch(false);
+        setSmartQuery('');
+      }, 1000);
     } catch (e) {
       setSmartError("Erreur lors de l'analyse IA. Veuillez reformuler votre requête.");
+      setShowWaveAnimation(false);
     } finally {
       setIsSmartLoading(false);
     }
@@ -213,37 +210,51 @@ function SchoolRankings() {
         <Sparkles className="text-blue-400 animate-bounce" /> Classement des écoles
       </h1>
 
-      {/* Barre IA */}
       <div className="mb-4">
         <button
-          className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded shadow hover:scale-105 transition-transform animate__animated animate__pulse"
+          className="ai-search-button group flex items-center gap-2"
           onClick={() => setShowSmartSearch(v => !v)}
         >
-          <Sparkles className="mr-2" /> Recherche intelligente (IA)
+          <Sparkles className="w-5 h-5 transition-transform group-hover:scale-110" />
+          Recherche intelligente (IA)
         </button>
+
         {showSmartSearch && (
           <div className="mt-3 animate__animated animate__fadeInDown">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tapez votre requête en langage naturel&nbsp;:
+              Tapez votre requête en langage naturel :
             </label>
-            <textarea
-              value={smartQuery}
-              onChange={e => setSmartQuery(e.target.value)}
-              rows={2}
-              className="w-full rounded-md border border-blue-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex : Classement des écoles pour les filles à Kolwezi en 2023"
-            />
+            <div className="relative">
+              <Search className="search-icon" />
+              <textarea
+                value={smartQuery}
+                onChange={e => setSmartQuery(e.target.value)}
+                rows={2}
+                className="search-input"
+                placeholder="Ex : Classement des écoles pour les filles à Kolwezi en 2023"
+              />
+            </div>
             <div className="flex items-center gap-3 mt-2">
               <button
                 onClick={handleSmartSearch}
                 disabled={isSmartLoading || !smartQuery.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                className="ai-search-button flex items-center gap-2"
               >
-                {isSmartLoading ? "Analyse..." : "Générer les filtres"}
+                {isSmartLoading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Analyse...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5" />
+                    Générer les filtres
+                  </>
+                )}
               </button>
               <button
                 onClick={() => setShowSmartSearch(false)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
               >
                 Annuler
               </button>
@@ -255,10 +266,16 @@ function SchoolRankings() {
               - "Classement 2023 toutes villes"<br />
               <span className="text-blue-500">L'IA va générer et appliquer les filtres automatiquement !</span>
             </div>
-            {smartError && <div className="text-red-500 mt-2">{smartError}</div>}
+            {smartError && (
+              <div className="text-red-500 mt-2 animate__animated animate__fadeIn">
+                {smartError}
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {showWaveAnimation && <div className="results-wave" />}
 
       <Card>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6 animate__animated animate__fadeIn">
@@ -363,7 +380,6 @@ function SchoolRankings() {
           </div>
         </div>
 
-        {/* Menu déroulant pour autres filtres */}
         <div className="mb-4 animate__animated animate__fadeIn">
           <button
             type="button"
@@ -390,7 +406,6 @@ function SchoolRankings() {
                   <option value="F">Filles</option>
                 </select>
               </div>
-              {/* Tu peux ajouter d'autres filtres ici */}
             </div>
           )}
         </div>
