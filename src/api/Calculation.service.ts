@@ -3,15 +3,16 @@ import axios from 'axios';
 const API_URL = 'http://localhost:3000/calculations';
 
 export interface SchoolRankingData {
-  id: number;
-  nom: string;
-  ville: string;
-  commune: string;
-  moyenne: number;
-  tauxReussite: number;
-  optionPrincipale: string;
-  rang: number;
-}
+    id: number;
+    nom: string;
+    ville: string;
+    commune: string;
+    moyenne: number;
+    tauxReussite: number;
+    optionPrincipale: string;
+    rang: number;
+    nombreEleves: number; // <-- AJOUTE CE CHAMP
+  }
 
 export interface GlobalStats {
   moyenneGenerale: number;
@@ -88,9 +89,10 @@ export const CalculationService = {
     anneeId: number,
     ville?: string,
     classeId?: number,
-    optionId?: number
+    optionId?: number,
+    genre?: string
   ): Promise<SchoolRankingData[]> => {
-    const params = { anneeId, ville, classeId, optionId };
+    const params = { anneeId, ville, classeId, optionId, genre };
     const response = await axios.get(`${API_URL}/school-rankings`, { params });
     return response.data;
   },
