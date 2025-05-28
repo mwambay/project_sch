@@ -1,34 +1,99 @@
+import { useEffect, useState } from 'react';
 import { TrendingUp, Award, School } from 'lucide-react';
 import Card from '../../components/Card';
 import StatCard from '../../components/StatCard';
 import BarChart from '../../components/BarChart';
+import { CalculationService } from '../../api/Calculation.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
 
 function ParentDashboard() {
-  // Sample data for statistics
-  const stats = {
-    totalSchools: 85,
-    topPerformingSchool: 'École C',
-    topPerformance: 92,
-    topImprovingSchool: 'École E',
-    improvementRate: 8.5,
-  };
-
-  // Sample data for top schools chart
-  const topSchools = {
-    labels: ['École C', 'École A', 'École E', 'École G', 'École D'],
+  const [stats, setStats] = useState({
+    totalSchools: 0,
+    topPerformingSchool: '',
+    topPerformance: 0,
+    topImprovingSchool: '',
+    improvementRate: 0,
+  });
+  const [topSchools, setTopSchools] = useState<{ labels: string[]; datasets: any[] }>({
+    labels: [],
     datasets: [
       {
         label: 'Moyenne générale',
-        data: [92, 86, 84, 83, 82],
+        data: [],
         backgroundColor: 'rgba(59, 130, 246, 0.6)',
       },
     ],
-  };
+  });
+
+  const [annees, setAnnees] = useState<AnneeData[]>([]);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+
+  // Récupérer les années au chargement et sélectionner la plus récente
+  useEffect(() => {
+    AnneeService.getAllAnnees().then(data => {
+      setAnnees(data);
+      if (data.length > 0) setSelectedYear(data[data.length - 1].id); // dernière année (id)
+    });
+  }, []);
+
+  // Charger les stats et le classement dès qu'une année est sélectionnée
+  useEffect(() => {
+    if (!selectedYear) return;
+
+    CalculationService.getGlobalStats(selectedYear).then(data => {
+      setStats(prev => ({
+        ...prev,
+        totalSchools: data.nombreEcoles,
+      }));
+    });
+
+    CalculationService.getSchoolRankings(selectedYear).then(data => {
+      if (data.length > 0) {
+        const sorted = [...data].sort((a, b) => b.moyenne - a.moyenne).slice(0, 5);
+        setTopSchools({
+          labels: sorted.map(s => s.nom),
+          datasets: [
+            {
+              label: 'Moyenne générale',
+              data: sorted.map(s => s.moyenne),
+              backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            },
+          ],
+        });
+        setStats(prev => ({
+          ...prev,
+          topPerformingSchool: sorted[0]?.nom || '',
+          topPerformance: sorted[0]?.moyenne || 0,
+        }));
+
+        const topImproving = [...data].sort((a, b) => b.tauxReussite - a.tauxReussite)[0];
+        setStats(prev => ({
+          ...prev,
+          topImprovingSchool: topImproving?.nom || '',
+          improvementRate: topImproving?.tauxReussite || 0,
+        }));
+      }
+    });
+  }, [selectedYear]);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">Tableau de bord parent</h1>
-      
+
+      {/* Sélecteur d'année */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-1">Année scolaire</label>
+        <select
+          value={selectedYear ?? ''}
+          onChange={e => setSelectedYear(Number(e.target.value))}
+          className="w-full max-w-xs rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        >
+          {annees.map(annee => (
+            <option key={annee.id} value={annee.id}>{annee.libelle}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard 
           title="Écoles dans le système" 

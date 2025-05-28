@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Card from '../../components/Card';
 import DataTable from '../../components/DataTable';
 import { MapPin, School, Filter, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
@@ -173,12 +173,16 @@ function SchoolRankings() {
   ];
 
   // Remplace la fonction handleSmartSearch par l'appel réel à Gemini
+  const [showIaWave, setShowIaWave] = useState(false);
+  const iaWaveRef = useRef<HTMLDivElement>(null);
   const handleSmartSearch = async () => {
     setIsSmartLoading(true);
     setSmartError('');
     try {
       const filters: GeminiFilters = await GeminiService.getFilters(smartQuery);
-      console.log("Filtres générés par Gemini:", filters);
+      // Animation IA : vague magique
+      setShowIaWave(true);
+      setTimeout(() => setShowIaWave(false), 1200);
 
       // Applique les filtres retournés par Gemini
       setSelectedCity(filters.ville || '');
@@ -208,7 +212,24 @@ function SchoolRankings() {
   };
 
   return (
-    <div className="space-y-6 animate__animated animate__fadeIn">
+    <div className="space-y-6 animate__animated animate__fadeIn relative overflow-hidden">
+      {/* Animation vague IA */}
+      {showIaWave && (
+        <div
+          ref={iaWaveRef}
+          className="fixed left-0 top-0 w-full h-full pointer-events-none z-50"
+          style={{ animation: 'iaWave 1.2s cubic-bezier(0.4,0,0.2,1)' }}
+        >
+          <div className="w-full h-full bg-gradient-to-b from-blue-500/80 via-purple-500/70 to-transparent blur-2xl opacity-80"
+            style={{
+              clipPath: 'ellipse(80% 20% at 50% 0%)',
+              filter: 'blur(32px)',
+              animation: 'iaDistort 1.2s cubic-bezier(0.4,0,0.2,1)'
+            }}
+          />
+        </div>
+      )}
+
       <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
         <Sparkles className="text-blue-400 animate-bounce" /> Classement des écoles
       </h1>
@@ -219,31 +240,53 @@ function SchoolRankings() {
           className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded shadow hover:scale-105 transition-transform animate__animated animate__pulse"
           onClick={() => setShowSmartSearch(v => !v)}
         >
-          <Sparkles className="mr-2" /> Recherche intelligente (IA)
+          <Sparkles className="mr-2 animate-pulse" /> Recherche intelligente (IA)
         </button>
         {showSmartSearch && (
           <div className="mt-3 animate__animated animate__fadeInDown">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tapez votre requête en langage naturel&nbsp;:
             </label>
-            <textarea
-              value={smartQuery}
-              onChange={e => setSmartQuery(e.target.value)}
-              rows={2}
-              className="w-full rounded-md border border-blue-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex : Classement des écoles pour les filles à Kolwezi en 2023"
-            />
-            <div className="flex items-center gap-3 mt-2">
+            <div className="relative px-2 py-2" >
+              <textarea
+                value={smartQuery}
+                onChange={e => setSmartQuery(e.target.value)}
+                rows={2}
+                className="w-full rounded-xl border-2 border-blue-400 shadow-lg px-4 py-3 focus:outline-none focus:ring-4 focus:ring-purple-300 focus:border-purple-500 bg-gradient-to-br from-blue-50 via-white to-purple-50 transition-all duration-300 placeholder:italic placeholder:text-blue-400 text-lg font-medium animate__animated animate__pulse"
+                placeholder="Ex : Classement des écoles pour les filles à Kolwezi en 2023"
+                style={{
+                  boxShadow: '0 0 0 4px #a78bfa33, 0 8px 32px 0 #6366f180',
+                  transition: 'box-shadow 0.3s'
+                }}
+              />
+              <Sparkles className="absolute right-3 top-3 text-purple-400 animate-pulse" size={24} />
+            </div>
+            <div className="flex items-center gap-3 mt-4 relative px-2 py-2">
               <button
                 onClick={handleSmartSearch}
                 disabled={isSmartLoading || !smartQuery.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-full shadow-lg hover:scale-105 transition-transform font-semibold text-lg flex items-center gap-2 relative overflow-hidden"
+                style={{
+                  boxShadow: '0 4px 24px 0 #6366f180'
+                }}
               >
-                {isSmartLoading ? "Analyse..." : "Générer les filtres"}
+                {isSmartLoading ? (
+                  <>
+                    <span className="animate-spin inline-block mr-2">
+                      <Sparkles size={20} />
+                    </span>
+                    Analyse...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={20} className="animate-pulse" />
+                    Générer les filtres
+                  </>
+                )}
               </button>
               <button
                 onClick={() => setShowSmartSearch(false)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
               >
                 Annuler
               </button>
@@ -476,6 +519,17 @@ function SchoolRankings() {
         .animate__animated { animation-duration: 0.7s; }
         .animate-spin-slow { animation: spin 2s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes iaWave {
+          0% { opacity: 0; transform: translateY(-100%) scaleY(0.7);}
+          20% { opacity: 1; }
+          60% { opacity: 1; transform: translateY(0) scaleY(1);}
+          100% { opacity: 0; transform: translateY(100%) scaleY(1.2);}
+        }
+        @keyframes iaDistort {
+          0% { filter: blur(48px) brightness(1.2);}
+          50% { filter: blur(16px) brightness(1.5);}
+          100% { filter: blur(64px) brightness(1);}
+        }
       `}</style>
     </div>
   );

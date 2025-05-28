@@ -1,21 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import BarChart from '../../components/BarChart';
 import DataTable from '../../components/DataTable';
 import { MapPin } from 'lucide-react';
+import { CalculationService, SchoolRankingData } from '../../api/Calculation.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
 
-interface SchoolData {
-  id: string;
-  name: string;
-  location: string;
-  distance: number;
-  average: number;
-  successRate: number;
-  mainOption: string;
-  rank: number;
-}
-
-// Sample data structure for cities and communes
 const cityCommunes: Record<string, string[]> = {
   'Lubumbashi': ['Lubumbashi', 'Kampemba', 'Kenya', 'Kamalondo', 'Rwashi', 'Annexe'],
   'Likasi': ['Likasi', 'Kikula', 'Shituru', 'Panda'],
@@ -27,105 +17,76 @@ const cityCommunes: Record<string, string[]> = {
 function CompareArea() {
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedCommune, setSelectedCommune] = useState('');
-  const [radius, setRadius] = useState('10');
-  
-  // Sample data
-  const cities = Object.keys(cityCommunes);
-  
-  // Get communes for selected city
-  const communes = selectedCity ? cityCommunes[selectedCity] : [];
-  
-  // Sample school data based on zone and radius
-  const schools: SchoolData[] = [
-    { 
-      id: '1', 
-      name: 'IT SALAMA', 
-      location: 'Lubumbashi', 
-      distance: 0, 
-      average: 92, 
-      successRate: 96, 
-      mainOption: 'Math-Info', 
-      rank: 1 
-    },
-    { 
-      id: '2', 
-      name: 'SAINT FRANCOIS XAVIER', 
-      location: 'Lubumbashi', 
-      distance: 2.5, 
-      average: 84, 
-      successRate: 88, 
-      mainOption: 'Math-Info', 
-      rank: 3 
-    },
-    { 
-      id: '3', 
-      name: 'EP KAMALONDO', 
-      location: 'Kamalondo', 
-      distance: 4.8, 
-      average: 76, 
-      successRate: 80, 
-      mainOption: 'Math-Info', 
-      rank: 8 
-    },
-    { 
-      id: '4', 
-      name: 'IMARA', 
-      location: 'Kampemba', 
-      distance: 6.2, 
-      average: 70, 
-      successRate: 75, 
-      mainOption: 'Sciences Sociales', 
-      rank: 11 
-    },
-    { 
-      id: '5', 
-      name: 'CFP LIKASI', 
-      location: 'Likasi', 
-      distance: 8.5, 
-      average: 65, 
-      successRate: 70, 
-      mainOption: 'Littérature', 
-      rank: 15 
-    },
-  ];
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [annees, setAnnees] = useState<AnneeData[]>([]);
 
-  // Filter schools based on radius and location
-  const filteredSchools = schools.filter(school => {
-    const matchesLocation = !selectedCity || school.location === selectedCity;
-    const matchesCommune = !selectedCommune || school.location === selectedCommune;
-    const withinRadius = school.distance <= parseInt(radius);
-    return matchesLocation && matchesCommune && withinRadius;
-  });
+  const [schools, setSchools] = useState<SchoolRankingData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const cities = Object.keys(cityCommunes);
+  const communes = selectedCity ? cityCommunes[selectedCity] : [];
+
+  // Récupérer les années scolaires au chargement
+  useEffect(() => {
+    AnneeService.getAllAnnees().then(data => {
+      setAnnees(data);
+      if (data.length > 0) setSelectedYear(data[data.length - 1].id); // année la plus récente par défaut
+    });
+  }, []);
+
+  // Chargement des écoles selon la ville/commune/année sélectionnée
+  useEffect(() => {
+    const fetchSchools = async () => {
+      if (!selectedCity || !selectedYear) {
+        setSchools([]);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const data = await CalculationService.getSchoolRankings(
+          selectedYear,
+          selectedCity,
+          undefined,
+          undefined,
+          undefined
+        );
+        console.log('Fetched schools:', data);
+        const filtered = selectedCommune
+          ? data.filter(s => s.commune === selectedCommune)
+          : data;
+        setSchools(filtered);
+      } catch (e) {
+        setSchools([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSchools();
+  }, [selectedCity, selectedCommune, selectedYear]);
 
   // Chart data
   const chartData = {
-    labels: filteredSchools.map(school => school.name),
+    labels: schools.map(school => school.nom),
     datasets: [
       {
         label: 'Moyenne générale',
-        data: filteredSchools.map(school => school.average),
+        data: schools.map(school => school.moyenne),
         backgroundColor: 'rgba(59, 130, 246, 0.6)',
       },
       {
         label: 'Taux de réussite (%)',
-        data: filteredSchools.map(school => school.successRate),
+        data: schools.map(school => school.tauxReussite),
         backgroundColor: 'rgba(16, 185, 129, 0.6)',
       }
     ],
   };
 
-  // Handle city change
-  const handleCityChange = (city: string) => {
-    setSelectedCity(city);
-    setSelectedCommune(''); // Reset commune when city changes
-  };
-
   // Table columns
   const columns = [
-    { key: 'name', header: 'École' },
+    { key: 'nom', header: 'École' },
     { 
-      key: 'location', 
-      header: 'Localisation',
+      key: 'ville', 
+      header: 'Ville',
       render: (value: string) => (
         <span className="flex items-center">
           <MapPin size={16} className="mr-1 text-gray-400" />
@@ -134,16 +95,13 @@ function CompareArea() {
       )
     },
     { 
-      key: 'distance', 
-      header: 'Distance (km)',
-      render: (value: number) => (
-        <span>{value.toFixed(1)} km</span>
-      )
+      key: 'commune', 
+      header: 'Commune',
     },
-    { key: 'average', header: 'Moyenne' },
-    { key: 'successRate', header: 'Taux de réussite (%)' },
+    { key: 'moyenne', header: 'Moyenne' },
+    { key: 'tauxReussite', header: 'Taux de réussite (%)' },
     { 
-      key: 'mainOption', 
+      key: 'optionPrincipale', 
       header: 'Option principale',
       render: (value: string) => (
         <span
@@ -159,14 +117,37 @@ function CompareArea() {
         </span>
       )
     },
+    { key: 'rang', header: 'Rang' },
   ];
+
+  // Handle city change
+  const handleCityChange = (city: string) => {
+    setSelectedCity(city);
+    setSelectedCommune('');
+  };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">Comparer les écoles d'une zone</h1>
       
       <Card>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Année
+            </label>
+            <select
+              value={selectedYear ?? ''}
+              onChange={e => setSelectedYear(Number(e.target.value))}
+              className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Sélectionner une année</option>
+              {annees.map(annee => (
+                <option key={annee.id} value={annee.id}>{annee.libelle}</option>
+              ))}
+            </select>
+          </div>
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Ville
@@ -204,7 +185,8 @@ function CompareArea() {
             </select>
           </div>
           
-          <div>
+          {/* Rayon désactivé */}
+          {/* <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Rayon de recherche (km)
             </label>
@@ -219,15 +201,16 @@ function CompareArea() {
               />
               <span className="w-12 text-center font-medium">{radius} km</span>
             </div>
-          </div>
+          </div> */}
         </div>
       </Card>
       
-      {/* Rest of the component remains the same */}
-      <Card title={`Écoles dans un rayon de ${radius} km${selectedCity ? ` autour de ${selectedCity}` : ''}${selectedCommune ? ` - ${selectedCommune}` : ''}`}>
+      <Card title={`Écoles${selectedCity ? ` à ${selectedCity}` : ''}${selectedCommune ? ` - ${selectedCommune}` : ''}`}>
         <div className="bg-gray-50 p-4 rounded-lg mb-6">
           <p className="text-sm text-gray-600">
-            {filteredSchools.length} écoles trouvées dans votre zone de recherche.
+            {isLoading
+              ? "Chargement des écoles..."
+              : `${schools.length} écoles trouvées dans votre zone de recherche.`}
           </p>
         </div>
         
@@ -241,7 +224,7 @@ function CompareArea() {
       <Card title="Détails des écoles">
         <DataTable
           columns={columns}
-          data={filteredSchools}
+          data={schools}
           pagination={false}
         />
       </Card>
