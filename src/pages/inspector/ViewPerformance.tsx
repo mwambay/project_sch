@@ -1,98 +1,102 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import BarChart from '../../components/BarChart';
 import LineChart from '../../components/LineChart';
 import DataTable from '../../components/DataTable';
+import { CalculationService } from '../../api/Calculation.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
+import { SchoolService, SchoolData } from '../../api/School.service';
+import { ClasseService, ClasseData } from '../../api/Classe.service';
 
 function ViewPerformance() {
+  const [schools, setSchools] = useState<SchoolData[]>([]);
+  const [classes, setClasses] = useState<ClasseData[]>([]);
+  const [years, setYears] = useState<AnneeData[]>([]);
   const [selectedSchool, setSelectedSchool] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
-  const [selectedYear, setSelectedYear] = useState('2024');
+  const [selectedYear, setSelectedYear] = useState('');
   const [filterBy, setFilterBy] = useState('all');
-  
-  // Sample data
-  const schools = ['Tous', 'École A', 'École B', 'École C', 'École D', 'École E'];
-  const classes = ['Tous', '6ème', '5ème', '4ème', '3ème', '2nde', '1ère', 'Terminale'];
-  const years = ['2024', '2023', '2022', '2021', '2020'];
-  
-  // Sample student data
-  const studentData = [
-    { id: 1, gender: 'M', average: 86, status: 'Réussi', className: '3ème', school: 'École A' },
-    { id: 2, gender: 'F', average: 92, status: 'Réussi', className: '3ème', school: 'École A' },
-    { id: 3, gender: 'M', average: 64, status: 'Réussi', className: '3ème', school: 'École A' },
-    { id: 4, gender: 'F', average: 78, status: 'Réussi', className: '3ème', school: 'École A' },
-    { id: 5, gender: 'M', average: 45, status: 'Échec', className: '3ème', school: 'École A' },
-    { id: 6, gender: 'F', average: 52, status: 'Réussi', className: '3ème', school: 'École A' },
-    { id: 7, gender: 'M', average: 73, status: 'Réussi', className: '3ème', school: 'École A' },
-    { id: 8, gender: 'F', average: 38, status: 'Échec', className: '3ème', school: 'École A' },
-  ];
-
-  // Filter data based on selection
-  const filteredData = studentData.filter(student => {
-    if (selectedSchool && selectedSchool !== 'Tous' && student.school !== selectedSchool) return false;
-    if (selectedClass && selectedClass !== 'Tous' && student.className !== selectedClass) return false;
-    if (filterBy === 'male' && student.gender !== 'M') return false;
-    if (filterBy === 'female' && student.gender !== 'F') return false;
-    return true;
-  });
-
-  // Calculate statistics
-  const avgScore = filteredData.length > 0 ? 
-    (filteredData.reduce((sum, student) => sum + student.average, 0) / filteredData.length).toFixed(1) : 
-    '0';
-  
-  const successRate = filteredData.length > 0 ? 
-    ((filteredData.filter(student => student.status === 'Réussi').length / filteredData.length) * 100).toFixed(1) : 
-    '0';
-
-  // Data for gender comparison chart
-  const maleStudents = filteredData.filter(student => student.gender === 'M');
-  const femaleStudents = filteredData.filter(student => student.gender === 'F');
-  
-  const maleAvg = maleStudents.length > 0 ? 
-    (maleStudents.reduce((sum, student) => sum + student.average, 0) / maleStudents.length) : 
-    0;
-  
-  const femaleAvg = femaleStudents.length > 0 ? 
-    (femaleStudents.reduce((sum, student) => sum + student.average, 0) / femaleStudents.length) : 
-    0;
-
-  const genderData = {
+  const [avgScore, setAvgScore] = useState('0');
+  const [successRate, setSuccessRate] = useState('0');
+  const [genderData, setGenderData] = useState<any>({
     labels: ['Moyenne par genre'],
     datasets: [
-      {
-        label: 'Garçons',
-        data: [maleAvg],
-        backgroundColor: 'rgba(59, 130, 246, 0.6)',
-      },
-      {
-        label: 'Filles',
-        data: [femaleAvg],
-        backgroundColor: 'rgba(236, 72, 153, 0.6)',
-      }
-    ],
-  };
+      { label: 'Garçons', data: [0], backgroundColor: 'rgba(59, 130, 246, 0.6)' },
+      { label: 'Filles', data: [0], backgroundColor: 'rgba(236, 72, 153, 0.6)' }
+    ]
+  });
+  const [filteredData, setFilteredData] = useState<any[]>([]);
 
-  // Data for performance trend
-  const trendData = {
-    labels: ['2020', '2021', '2022', '2023', '2024'],
-    datasets: [
-      {
-        label: 'Moyenne',
-        data: [68, 70, 71, 69, 73],
-        borderColor: 'rgba(59, 130, 246, 0.8)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-      },
-      {
-        label: 'Taux de réussite (%)',
-        data: [75, 78, 80, 77, 82],
-        borderColor: 'rgba(16, 185, 129, 0.8)',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-      }
-    ],
-  };
+  // Charger écoles, classes, années au montage
+  useEffect(() => {
+    SchoolService.getAllSchools().then(setSchools);
+    ClasseService.getAllClasses().then(setClasses);
+    AnneeService.getAllAnnees().then(setYears);
+  }, []);
 
-  // Table columns
+  // Charger les stats et données élèves à chaque changement de filtre
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (!selectedYear) return;
+      const anneeId = Number(selectedYear);
+      const ecoleId = selectedSchool ? Number(selectedSchool) : undefined;
+      const classeId = selectedClass ? Number(selectedClass) : undefined;
+      let genre: string | undefined = undefined;
+      if (filterBy === 'male') genre = 'M';
+      if (filterBy === 'female') genre = 'F';
+
+      // Moyenne générale et taux de réussite
+      if (ecoleId && anneeId) {
+        const moyenne = await CalculationService.getMoyenneGenerale(ecoleId, anneeId, classeId);
+        setAvgScore(Number(moyenne).toFixed(1));
+        const taux = await CalculationService.getTauxReussite(ecoleId, anneeId, classeId);
+        setSuccessRate(Number(taux).toFixed(1));
+      } else {
+        setAvgScore('0');
+        setSuccessRate('0');
+      }
+
+      // Diagramme de genre
+      if (ecoleId && anneeId) {
+        const garcon = await CalculationService.getMoyenneGenerale(ecoleId, anneeId, classeId, undefined, 'M');
+        const fille = await CalculationService.getMoyenneGenerale(ecoleId, anneeId, classeId, undefined, 'F');
+        setGenderData({
+          labels: ['Moyenne par genre'],
+          datasets: [
+            { label: 'Garçons', data: [garcon], backgroundColor: 'rgba(59, 130, 246, 0.6)' },
+            { label: 'Filles', data: [fille], backgroundColor: 'rgba(236, 72, 153, 0.6)' }
+          ]
+        });
+      } else {
+        setGenderData({
+          labels: ['Moyenne par genre'],
+          datasets: [
+            { label: 'Garçons', data: [0], backgroundColor: 'rgba(59, 130, 246, 0.6)' },
+            { label: 'Filles', data: [0], backgroundColor: 'rgba(236, 72, 153, 0.6)' }
+          ]
+        });
+      }
+
+      // Table des élèves
+      const allResults = await import('../../api/Resultat.service').then(m => m.ResultatService.getAllResultats());
+      const filtered = allResults.filter((res: any) => {
+        const matchEcole = ecoleId ? (typeof res.ecole === 'object' ? res.ecole.id === ecoleId : res.ecole === ecoleId) : true;
+        const matchClasse = classeId ? (typeof res.classe === 'object' ? res.classe.id === classeId : res.classe === classeId) : true;
+        const matchAnnee = anneeId ? (typeof res.annee === 'object' ? res.annee.id === anneeId : res.annee === anneeId) : true;
+        const matchGenre = genre ? res.genre === genre : true;
+        return matchEcole && matchClasse && matchAnnee && matchGenre;
+      }).map((res: any) => ({
+        id: res.id,
+        gender: res.genre === 'M' ? 'Garçon' : 'Fille',
+        average: res.moyenne,
+        status: res.moyenne >= 50 ? 'Réussi' : 'Échoué'
+      }));
+      setFilteredData(filtered);
+    };
+    fetchStats();
+  }, [selectedSchool, selectedClass, selectedYear, filterBy]);
+
+  // Colonnes de la table
   const columns = [
     { key: 'id', header: 'ID' },
     { key: 'gender', header: 'Genre' },
@@ -128,9 +132,9 @@ function ViewPerformance() {
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Toutes les écoles</option>
-              {schools.filter(s => s !== 'Tous').map((school) => (
-                <option key={school} value={school}>
-                  {school}
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.nom}
                 </option>
               ))}
             </select>
@@ -146,9 +150,9 @@ function ViewPerformance() {
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Toutes les classes</option>
-              {classes.filter(c => c !== 'Tous').map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
+              {classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.nom}
                 </option>
               ))}
             </select>
@@ -163,9 +167,10 @@ function ViewPerformance() {
               onChange={(e) => setSelectedYear(e.target.value)}
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
+              <option value="">Toutes les années</option>
               {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
+                <option key={year.id} value={year.id}>
+                  {year.libelle}
                 </option>
               ))}
             </select>
@@ -212,8 +217,15 @@ function ViewPerformance() {
         <Card title="Tendance de performance">
           <LineChart 
             title="Évolution sur 5 ans" 
-            labels={trendData.labels} 
-            datasets={trendData.datasets}
+            labels={['2019', '2020', '2021', '2022', '2023']} 
+            datasets={[
+              {
+                label: 'Moyenne générale',
+                data: [75, 78, 80, 82, 85],
+                borderColor: 'rgba(59, 130, 246, 1)',
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+              }
+            ]}
           />
         </Card>
       </div>

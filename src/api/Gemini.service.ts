@@ -21,5 +21,14 @@ export const GeminiService = {
     return typeof response.data.filters === 'string'
       ? JSON.parse(response.data.filters)
       : response.data.filters;
+  },
+
+  /**
+   * Envoie un prompt à l'API Gemini pour obtenir un résumé IA.
+   * @param prompt Le prompt à résumer.
+   */
+  async getSummary(prompt: string): Promise<string> {
+    const response = await axios.post(`${API_URL}/summary`, { prompt });
+    return response.data.summary;
   }
 };

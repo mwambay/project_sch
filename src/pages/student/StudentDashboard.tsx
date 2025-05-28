@@ -1,19 +1,67 @@
+import { useState, useEffect } from 'react';
 import { Search, TrendingUp, BookOpen } from 'lucide-react';
 import Card from '../../components/Card';
 import BarChart from '../../components/BarChart';
+import { useNavigate } from 'react-router-dom';
+import { OptionService, OptionData } from '../../api/Option.service';
+import { ResultatService, ResultatData } from '../../api/Resultat.service';
 
 function StudentDashboard() {
-  // Sample data for top options chart
-  const optionsData = {
-    labels: ['Math-Info', 'Biochimie', 'Sciences Sociales', 'Littérature', 'Art'],
-    datasets: [
-      {
-        label: 'Taux de réussite moyen (%)',
-        data: [85, 80, 76, 72, 88],
-        backgroundColor: 'rgba(59, 130, 246, 0.6)',
-      },
-    ],
-  };
+  const navigate = useNavigate();
+  const path_one = "/student/search-option";
+  const path_two = "/student/success-trends";
+
+  const [optionsData, setOptionsData] = useState({
+    labels: [],
+    datasets: [],
+  });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Récupérer toutes les options
+        const options = await OptionService.getAllOptions();
+
+        // Récupérer tous les résultats
+        const results = await ResultatService.getAllResultats();
+
+        // Calculer le taux de réussite moyen pour chaque option
+        const labels = options.map(option => option.nom);
+        const data = labels.map(label => {
+          const optionResults = results.filter(result =>
+            typeof result.option === 'object'
+              ? result.option.nom === label
+              : options.find(opt => opt.id === result.option)?.nom === label
+          );
+
+          if (optionResults.length === 0) return 0;
+
+          const successRate =
+            (optionResults.filter(result => result.moyenne >= 50).length /
+              optionResults.length) *
+            100;
+
+          return successRate.toFixed(1);
+        });
+
+        // Mettre à jour les données du graphique
+        setOptionsData({
+          labels,
+          datasets: [
+            {
+              label: 'Taux de réussite moyen (%)',
+              data,
+              backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            },
+          ],
+        });
+      } catch (error) {
+        console.error("Erreur lors du chargement des données :", error);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -29,7 +77,7 @@ function StudentDashboard() {
             Trouvez les meilleures écoles selon vos critères et préférences
           </p>
           <button
-            onClick={() => window.location.href = '/student/search-option'}
+            onClick={() => navigate(path_one)}
             className="mt-auto px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             Commencer la recherche
@@ -45,7 +93,7 @@ function StudentDashboard() {
             Analysez l'évolution des taux de réussite des écoles sur plusieurs années
           </p>
           <button
-            onClick={() => window.location.href = '/student/success-trends'}
+            onClick={() => navigate(path_two)}
             className="mt-auto px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
           >
             Voir les tendances

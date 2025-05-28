@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import DataTable from '../../components/DataTable';
 import { MapPin, Search } from 'lucide-react';
-
+import { OptionService, OptionData } from '../../api/Option.service';
+import { CalculationService, SchoolRankingData } from '../../api/Calculation.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
+import { GeminiService } from '../../api/Gemini.service';
 interface SchoolData {
   id: string;
   name: string;
@@ -15,90 +18,80 @@ interface SchoolData {
 }
 
 function SearchByOption() {
+  const [options, setOptions] = useState<OptionData[]>([]);
+  const [locations, setLocations] = useState<string[]>(['Toutes les villes']);
+  const [years, setYears] = useState<AnneeData[]>([]);
   const [selectedOption, setSelectedOption] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('Toutes les villes');
+  const [selectedYear, setSelectedYear] = useState('');
   const [searchResults, setSearchResults] = useState<SchoolData[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
-  
-  // Sample data
-  const options = ['Math-Info', 'Biochimie', 'Littérature', 'Sciences Sociales', 'Art'];
-  const locations = ['Toutes les villes', 'Ville A', 'Ville B', 'Ville C', 'Ville D', 'Ville E'];
-  
-  // Sample school data
-  const schools: SchoolData[] = [
-    { 
-      id: '1', 
-      name: 'École C', 
-      location: 'Ville A', 
-      average: 92, 
-      successRate: 96, 
-      mainOption: 'Math-Info',
-      otherOptions: ['Biochimie', 'Sciences Sociales'],
-      rank: 1 
-    },
-    { 
-      id: '2', 
-      name: 'École A', 
-      location: 'Ville B', 
-      average: 86, 
-      successRate: 90, 
-      mainOption: 'Biochimie',
-      otherOptions: ['Math-Info', 'Littérature'],
-      rank: 2 
-    },
-    { 
-      id: '3', 
-      name: 'École E', 
-      location: 'Ville A', 
-      average: 84, 
-      successRate: 88, 
-      mainOption: 'Math-Info',
-      otherOptions: ['Sciences Sociales', 'Art'],
-      rank: 3 
-    },
-    { 
-      id: '4', 
-      name: 'École G', 
-      location: 'Ville C', 
-      average: 83, 
-      successRate: 87, 
-      mainOption: 'Art',
-      otherOptions: ['Littérature'],
-      rank: 4 
-    },
-    { 
-      id: '5', 
-      name: 'École D', 
-      location: 'Ville B', 
-      average: 82, 
-      successRate: 86, 
-      mainOption: 'Littérature',
-      otherOptions: ['Art', 'Sciences Sociales'],
-      rank: 5 
-    },
-  ];
+  const [iaSummary, setIaSummary] = useState('');
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  // Charger options, années et villes au montage
+  useEffect(() => {
+    OptionService.getAllOptions().then(setOptions);
+    AnneeService.getAllAnnees().then(setYears);
+    // Récupérer toutes les villes disponibles via CalculationService
+    CalculationService.getSchoolRankings(years[0]?.id || 1).then((schools) => {
+      const villes = Array.from(new Set(schools.map((s: SchoolRankingData) => s.ville)));
+      setLocations(['Toutes les villes', ...villes]);
+    });
+  }, [years.length]);
 
-  const handleSearch = () => {
-    if (!selectedOption) return;
-    
-    // Filter schools based on selected options
-    let results = schools.filter(school => 
-      school.mainOption === selectedOption || school.otherOptions.includes(selectedOption)
-    );
-    
-    // Further filter by location if selected
-    if (selectedLocation && selectedLocation !== 'Toutes les villes') {
-      results = results.filter(school => school.location === selectedLocation);
+
+  const generateIaSummary = async () => {
+    setIsSummaryLoading(true);
+    try {
+      const details = searchResults.map(s =>
+        `- ${s.name} (${s.location}) : moyenne ${s.average?.toFixed(2)}, taux de réussite ${s.successRate?.toFixed(1)}%`
+      ).join('\n');
+
+      const prompt = `
+  Voici les résultats de la recherche d'écoles pour l'option "${options.find(o => String(o.id) === selectedOption)?.nom || ''}"${selectedLocation && selectedLocation !== 'Toutes les villes' ? ` à ${selectedLocation}` : ''}${selectedYear ? ` pour l'année ${years.find(y => String(y.id) === selectedYear)?.libelle}` : ''}.
+
+  Nombre d'écoles trouvées : ${searchResults.length}.
+
+  Détails :
+  ${details}
+
+  Fais un résumé en 2-3 phrases sur la performance générale, la diversité, et propose une recommandation personnalisée pour un élève qui cherche la meilleure école selon ces résultats.
+  Utilise un ton positif, moderne et dynamique.
+      `;
+
+      const response = await GeminiService.getSummary(prompt);
+      setIaSummary(typeof response === 'string' ? response : JSON.stringify(response));
+    } catch (e) {
+      setIaSummary("Résumé IA indisponible pour le moment.");
     }
-    
-    // Sort by rank
-    results.sort((a, b) => a.rank - b.rank);
-    
+    setIsSummaryLoading(false);
+  };
+  const handleSearch = async () => {
+    if (!selectedOption || !selectedYear) return;
+    // Récupérer le classement filtré par option et ville
+    const optionObj = options.find(opt => String(opt.id) === selectedOption);
+    const rankings: SchoolRankingData[] = await CalculationService.getSchoolRankings(
+      Number(selectedYear),
+      selectedLocation !== 'Toutes les villes' ? selectedLocation : undefined,
+      undefined,
+      Number(selectedOption)
+    );
+    // Adapter les données pour le tableau
+    const results: SchoolData[] = rankings.map((school) => ({
+      id: String(school.id),
+      name: school.nom,
+      location: school.ville,
+      average: school.moyenne,
+      successRate: school.tauxReussite,
+      mainOption: school.optionPrincipale,
+      otherOptions: [], // À remplir si dispo dans l'API
+      rank: school.rang,
+    }));
     setSearchResults(results);
     setHasSearched(true);
   };
 
-  // Table columns
+  // Colonnes du tableau
   const columns = [
     { key: 'name', header: 'École' },
     { 
@@ -116,45 +109,33 @@ function SearchByOption() {
     { 
       key: 'mainOption', 
       header: 'Option principale',
-      render: (value: string, item: SchoolData) => (
-        <div>
-          <span
-            className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-              value === selectedOption ? 'bg-blue-100 text-blue-800 border border-blue-300' : 
-              value === 'Math-Info' ? 'bg-blue-100 text-blue-800' : 
-              value === 'Biochimie' ? 'bg-green-100 text-green-800' :
-              value === 'Littérature' ? 'bg-purple-100 text-purple-800' :
-              value === 'Sciences Sociales' ? 'bg-yellow-100 text-yellow-800' :
-              'bg-pink-100 text-pink-800'
-            }`}
-          >
-            {value}
-          </span>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {item.otherOptions.map(option => (
-              <span
-                key={option}
-                className={`px-2 py-0.5 text-xs leading-4 rounded-full ${
-                  option === selectedOption ? 'bg-blue-100 text-blue-800 border border-blue-300' :
-                  'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {option}
-              </span>
-            ))}
-          </div>
-        </div>
+      render: (value: string) => (
+        <span
+          className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 border border-blue-300`}
+        >
+          {value}
+        </span>
       )
     },
+    { key: 'rank', header: 'Classement' },
   ];
+
+  useEffect(() => {
+    if (searchResults.length > 0) {
+      generateIaSummary();
+    } else {
+      setIaSummary('');
+    }
+    // eslint-disable-next-line
+  }, [searchResults]);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">Rechercher une école par option</h1>
       
       <Card>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-1">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Filière / Option
             </label>
@@ -165,14 +146,13 @@ function SearchByOption() {
             >
               <option value="">Sélectionnez une option</option>
               {options.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+                <option key={option.id} value={option.id}>
+                  {option.nom}
                 </option>
               ))}
             </select>
           </div>
-          
-          <div className="md:col-span-1">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Localisation
             </label>
@@ -188,11 +168,27 @@ function SearchByOption() {
               ))}
             </select>
           </div>
-          
-          <div className="md:col-span-1 flex items-end">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Année scolaire
+            </label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Toutes les années</option>
+              {years.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.libelle}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
             <button
               onClick={handleSearch}
-              disabled={!selectedOption}
+              disabled={!selectedOption || !selectedYear}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Search size={18} className="inline mr-2" />
@@ -201,14 +197,28 @@ function SearchByOption() {
           </div>
         </div>
       </Card>
-      
+
+      {(isSummaryLoading || iaSummary) && (
+        <div className="relative my-6 animate__animated animate__fadeInUp">
+          <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border-l-4 border-blue-400 rounded-xl shadow-lg px-6 py-4 flex items-center gap-4 overflow-hidden">
+            <span className="font-semibold text-blue-700 mb-1 flex items-center gap-2">
+              Résumé IA
+              {isSummaryLoading && <span className="animate-spin ml-2"><Search size={18} /></span>}
+            </span>
+            <div className="text-gray-700 text-base animate__animated animate__fadeIn">
+              {isSummaryLoading ? "Génération du résumé en cours..." : iaSummary}
+            </div>
+          </div>
+        </div>
+      )}
+
       {hasSearched && (
         <Card title="Résultats de recherche">
           {searchResults.length > 0 ? (
             <>
               <div className="bg-gray-50 p-4 rounded-lg mb-6">
                 <p className="text-sm text-gray-600">
-                  {searchResults.length} école(s) trouvée(s) avec l'option {selectedOption}
+                  {searchResults.length} école(s) trouvée(s) avec l'option {options.find(o => String(o.id) === selectedOption)?.nom}
                   {selectedLocation && selectedLocation !== 'Toutes les villes' ? ` à ${selectedLocation}` : ''}
                 </p>
               </div>
@@ -232,7 +242,8 @@ function SearchByOption() {
           )}
         </Card>
       )}
-      
+
+      {/* ...section d'informations sur les options... */}
       <Card title="Informations sur les options">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-blue-50 p-4 rounded-lg">

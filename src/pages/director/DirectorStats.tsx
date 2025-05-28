@@ -1,104 +1,183 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import BarChart from '../../components/BarChart';
 import LineChart from '../../components/LineChart';
 import DataTable from '../../components/DataTable';
+import { ClasseService, ClasseData } from '../../api/Classe.service';
+import { OptionService, OptionData } from '../../api/Option.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
+import { ResultatService, ResultatData } from '../../api/Resultat.service';
+import { CalculationService } from '../../api/Calculation.service';
 
 function DirectorStats() {
+  const [classes, setClasses] = useState<ClasseData[]>([]);
+  const [options, setOptions] = useState<OptionData[]>([]);
+  const [annees, setAnnees] = useState<AnneeData[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedOption, setSelectedOption] = useState('');
+  const [selectedAnnee, setSelectedAnnee] = useState('');
   const [filterBy, setFilterBy] = useState('all');
-  
-  // Sample school name
-  const schoolName = "École A";
-  
-  // Sample data
-  const classes = ['Tous', '6ème', '5ème', '4ème', '3ème', '2nde', '1ère', 'Terminale'];
-  const options = ['Tous', 'Math-Info', 'Biochimie', 'Littérature', 'Sciences Sociales', 'Art'];
-  
-  // Sample student data
-  const studentData = [
-    { id: 1, gender: 'M', average: 86, status: 'Réussi', className: '3ème', option: 'Math-Info' },
-    { id: 2, gender: 'F', average: 92, status: 'Réussi', className: '3ème', option: 'Math-Info' },
-    { id: 3, gender: 'M', average: 64, status: 'Réussi', className: '3ème', option: 'Littérature' },
-    { id: 4, gender: 'F', average: 78, status: 'Réussi', className: '3ème', option: 'Biochimie' },
-    { id: 5, gender: 'M', average: 45, status: 'Échec', className: '3ème', option: 'Math-Info' },
-    { id: 6, gender: 'F', average: 52, status: 'Réussi', className: '3ème', option: 'Sciences Sociales' },
-    { id: 7, gender: 'M', average: 73, status: 'Réussi', className: '3ème', option: 'Biochimie' },
-    { id: 8, gender: 'F', average: 38, status: 'Échec', className: '3ème', option: 'Art' },
-  ];
+  const [studentData, setStudentData] = useState<ResultatData[]>([]);
+  const [schoolName, setSchoolName] = useState('Mon École');
 
-  // Filter data based on selection
-  const filteredData = studentData.filter(student => {
-    if (selectedClass && selectedClass !== 'Tous' && student.className !== selectedClass) return false;
-    if (selectedOption && selectedOption !== 'Tous' && student.option !== selectedOption) return false;
-    if (filterBy === 'male' && student.gender !== 'M') return false;
-    if (filterBy === 'female' && student.gender !== 'F') return false;
-    return true;
-  });
+  // Charger les données de référence
+  useEffect(() => {
+    ClasseService.getAllClasses().then(setClasses);
+    OptionService.getAllOptions().then(setOptions);
+    AnneeService.getAllAnnees().then(setAnnees);
+    // Charger le nom de l'école si besoin via SchoolService.getSchoolById(...)
+  }, []);
 
-  // Calculate statistics
-  const avgScore = filteredData.length > 0 ? 
-    (filteredData.reduce((sum, student) => sum + student.average, 0) / filteredData.length).toFixed(1) : 
-    '0';
-  
-  const successRate = filteredData.length > 0 ? 
-    ((filteredData.filter(student => student.status === 'Réussi').length / filteredData.length) * 100).toFixed(1) : 
-    '0';
+  // Charger les résultats élèves selon les filtres
+  useEffect(() => {
+    const fetchData = async () => {
+      let allResults = await ResultatService.getAllResultats();
+      // Filtrage par classe, option, année, genre
+      if (selectedClass) {
+        allResults = allResults.filter(r =>
+          typeof r.classe === 'object'
+            ? r.classe.id === Number(selectedClass)
+            : r.classe === Number(selectedClass)
+        );
+      }
+      if (selectedOption) {
+        allResults = allResults.filter(r =>
+          typeof r.option === 'object'
+            ? r.option.id === Number(selectedOption)
+            : r.option === Number(selectedOption)
+        );
+      }
+      if (selectedAnnee) {
+        allResults = allResults.filter(r =>
+          typeof r.annee === 'object'
+            ? r.annee.id === Number(selectedAnnee)
+            : r.annee === Number(selectedAnnee)
+        );
+      }
+      if (filterBy === 'male') {
+        allResults = allResults.filter(r => r.genre === 'M');
+      }
+      if (filterBy === 'female') {
+        allResults = allResults.filter(r => r.genre === 'F');
+      }
+      setStudentData(allResults);
+    };
+    fetchData();
+  }, [selectedClass, selectedOption, selectedAnnee, filterBy]);
 
-  // Data for option comparison chart
+  // Calculs statistiques
+  const avgScore =
+    studentData.length > 0
+      ? (
+          studentData.reduce((sum, student) => sum + (student.moyenne || 0), 0) /
+          studentData.length
+        ).toFixed(1)
+      : '0';
+
+  const successRate =
+    studentData.length > 0
+      ? (
+          (studentData.filter(student => student.moyenne >= 50).length / studentData.length) *
+          100
+        ).toFixed(1)
+      : '0';
+
+  // Préparer les labels/options pour les selects
+  const classOptions = [{ id: '', nom: 'Toutes les classes' }, ...classes];
+  const optionOptions = [{ id: '', nom: 'Toutes les options' }, ...options];
+  const anneeOptions = [{ id: '', libelle: 'Toutes les années' }, ...annees];
+
+  // Préparer les données pour les graphiques (exemple simple, à adapter selon vos besoins)
+  const optionLabels = options.map(o => o.nom);
   const optionPerformance = {
-    labels: ['Math-Info', 'Biochimie', 'Littérature', 'Sciences Sociales', 'Art'],
+    labels: optionLabels,
     datasets: [
       {
         label: 'Moyenne par option',
-        data: [76, 72, 68, 70, 85],
+        data: optionLabels.map(opt =>
+          (() => {
+            const optStudents = studentData.filter(
+              s =>
+                (typeof s.option === 'object'
+                  ? s.option.nom === opt
+                  : options.find(o => o.id === s.option)?.nom === opt)
+            );
+            return optStudents.length > 0
+              ? optStudents.reduce((sum, s) => sum + (s.moyenne || 0), 0) / optStudents.length
+              : 0;
+          })()
+        ),
         backgroundColor: 'rgba(59, 130, 246, 0.6)',
       },
     ],
   };
 
-  // Data for gender comparison chart
   const genderData = {
     labels: ['Moyenne par genre'],
     datasets: [
       {
         label: 'Garçons',
-        data: [72],
+        data: [
+          (() => {
+            const boys = studentData.filter(s => s.genre === 'M');
+            return boys.length > 0
+              ? boys.reduce((sum, s) => sum + (s.moyenne || 0), 0) / boys.length
+              : 0;
+          })(),
+        ],
         backgroundColor: 'rgba(59, 130, 246, 0.6)',
       },
       {
         label: 'Filles',
-        data: [78],
+        data: [
+          (() => {
+            const girls = studentData.filter(s => s.genre === 'F');
+            return girls.length > 0
+              ? girls.reduce((sum, s) => sum + (s.moyenne || 0), 0) / girls.length
+              : 0;
+          })(),
+        ],
         backgroundColor: 'rgba(236, 72, 153, 0.6)',
-      }
+      },
     ],
   };
 
-  // Table columns
+  // Colonnes du tableau
   const columns = [
     { key: 'id', header: 'ID' },
-    { key: 'gender', header: 'Genre' },
-    { key: 'className', header: 'Classe' },
-    { key: 'option', header: 'Option' },
-    { key: 'average', header: 'Moyenne' },
-    { 
-      key: 'status', 
+    { key: 'genre', header: 'Genre' },
+    {
+      key: 'classe',
+      header: 'Classe',
+      render: (value: any) =>
+        typeof value === 'object' && value?.nom ? value.nom : value,
+    },
+    {
+      key: 'option',
+      header: 'Option',
+      render: (value: any) =>
+        typeof value === 'object' && value?.nom ? value.nom : value,
+    },
+    { key: 'moyenne', header: 'Moyenne' },
+    {
+      key: 'status',
       header: 'Statut',
-      render: (value: string) => (
+      render: (_: any, row: ResultatData) => (
         <span
           className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-            value === 'Réussi' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            row.moyenne >= 50
+              ? 'bg-green-100 text-green-800'
+              : 'bg-red-100 text-red-800'
           }`}
         >
-          {value}
+          {row.moyenne >= 50 ? 'Réussi' : 'Échec'}
         </span>
-      )
+      ),
     },
   ];
 
   const exportData = () => {
-    alert("Données exportées avec succès");
+    alert('Données exportées avec succès');
   };
 
   return (
@@ -112,52 +191,67 @@ function DirectorStats() {
           Exporter les données
         </button>
       </div>
-      
+
       <Card>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Classe
             </label>
             <select
               value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
+              onChange={e => setSelectedClass(e.target.value)}
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="">Toutes les classes</option>
-              {classes.filter(c => c !== 'Tous').map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
+              {classOptions.map(cls => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.nom}
                 </option>
               ))}
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Option
             </label>
             <select
               value={selectedOption}
-              onChange={(e) => setSelectedOption(e.target.value)}
+              onChange={e => setSelectedOption(e.target.value)}
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="">Toutes les options</option>
-              {options.filter(o => o !== 'Tous').map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {optionOptions.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.nom}
                 </option>
               ))}
             </select>
           </div>
-          
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Année scolaire
+            </label>
+            <select
+              value={selectedAnnee}
+              onChange={e => setSelectedAnnee(e.target.value)}
+              className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            >
+              {anneeOptions.map(annee => (
+                <option key={annee.id} value={annee.id}>
+                  {annee.libelle}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Filtrer par
             </label>
             <select
               value={filterBy}
-              onChange={(e) => setFilterBy(e.target.value)}
+              onChange={e => setFilterBy(e.target.value)}
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">Tous les élèves</option>
@@ -166,43 +260,40 @@ function DirectorStats() {
             </select>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-medium text-gray-800 mb-2">Moyenne générale</h3>
             <p className="text-3xl font-bold text-blue-600">{avgScore}</p>
           </div>
-          
+
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-medium text-gray-800 mb-2">Taux de réussite</h3>
             <p className="text-3xl font-bold text-green-600">{successRate}%</p>
           </div>
         </div>
       </Card>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Performance par option">
-          <BarChart 
-            title="Moyenne par option" 
-            labels={optionPerformance.labels} 
+          <BarChart
+            title="Moyenne par option"
+            labels={optionPerformance.labels}
             datasets={optionPerformance.datasets}
           />
         </Card>
-        
+
         <Card title="Comparaison par genre">
-          <BarChart 
-            title="Moyenne par genre" 
-            labels={genderData.labels} 
+          <BarChart
+            title="Moyenne par genre"
+            labels={genderData.labels}
             datasets={genderData.datasets}
           />
         </Card>
       </div>
-      
+
       <Card title="Données des élèves">
-        <DataTable
-          columns={columns}
-          data={filteredData}
-        />
+        <DataTable columns={columns} data={studentData} />
       </Card>
     </div>
   );

@@ -1,92 +1,124 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import BarChart from '../../components/BarChart';
 import LineChart from '../../components/LineChart';
 import DataTable from '../../components/DataTable';
+import { SchoolService, SchoolData } from '../../api/School.service';
+import { ClasseService, ClasseData } from '../../api/Classe.service';
+import { OptionService, OptionData } from '../../api/Option.service';
+import { AnneeService, AnneeData } from '../../api/Annee.service';
+import { CalculationService, SchoolRankingData } from '../../api/Calculation.service';
 
 function CompareSchools() {
-  const [selectedSchools, setSelectedSchools] = useState<string[]>([]);
+  const [schools, setSchools] = useState<SchoolData[]>([]);
+  const [classes, setClasses] = useState<ClasseData[]>([]);
+  const [options, setOptions] = useState<OptionData[]>([]);
+  const [years, setYears] = useState<AnneeData[]>([]);
+  const [selectedSchools, setSelectedSchools] = useState<number[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedOption, setSelectedOption] = useState('');
-  const [selectedYear, setSelectedYear] = useState('2024');
-  
-  // Sample data
-  const schools = ['École A', 'École B', 'École C', 'École D', 'École E'];
-  const classes = ['Tous', '6ème', '5ème', '4ème', '3ème', '2nde', '1ère', 'Terminale'];
-  const options = ['Tous', 'Math-Info', 'Biochimie', 'Littérature', 'Sciences Sociales', 'Art'];
-  const years = ['2024', '2023', '2022', '2021', '2020'];
-  
-  // Sample comparison data
-  const comparisonData = {
-    labels: selectedSchools.length > 0 ? selectedSchools : ['École A', 'École B', 'École C'],
-    datasets: [
-      {
-        label: 'Moyenne générale',
-        data: [76, 68, 82],
-        backgroundColor: 'rgba(59, 130, 246, 0.6)',
-      },
-      {
-        label: 'Taux de réussite (%)',
-        data: [85, 72, 90],
-        backgroundColor: 'rgba(16, 185, 129, 0.6)',
+  const [selectedYear, setSelectedYear] = useState('');
+  const [comparisonDetails, setComparisonDetails] = useState<any[]>([]);
+  const [comparisonData, setComparisonData] = useState<any>({ labels: [], datasets: [] });
+  const [trendData, setTrendData] = useState<any>({ labels: [], datasets: [] });
+
+  // Charger les données de référence
+  useEffect(() => {
+    SchoolService.getAllSchools().then(setSchools);
+    ClasseService.getAllClasses().then(setClasses);
+    OptionService.getAllOptions().then(setOptions);
+    AnneeService.getAllAnnees().then(setYears);
+  }, []);
+
+  // Charger les comparaisons à chaque changement de filtre
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!selectedYear || selectedSchools.length === 0) {
+        setComparisonDetails([]);
+        setComparisonData({ labels: [], datasets: [] });
+        setTrendData({ labels: [], datasets: [] });
+        return;
       }
-    ],
-  };
+      const anneeId = Number(selectedYear);
+      const classeId = selectedClass ? Number(selectedClass) : undefined;
+      const optionId = selectedOption ? Number(selectedOption) : undefined;
 
-  // Sample trend data
-  const trendData = {
-    labels: ['2020', '2021', '2022', '2023', '2024'],
-    datasets: [
-      {
-        label: 'École A',
-        data: [65, 68, 72, 74, 76],
-        borderColor: 'rgba(59, 130, 246, 0.8)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-      },
-      {
-        label: 'École B',
-        data: [62, 64, 65, 67, 68],
-        borderColor: 'rgba(239, 68, 68, 0.8)',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-      },
-      {
-        label: 'École C',
-        data: [70, 75, 78, 80, 82],
-        borderColor: 'rgba(16, 185, 129, 0.8)',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+      // Récupérer le classement des écoles pour l'année/filtre
+      const rankings: SchoolRankingData[] = await CalculationService.getSchoolRankings(
+        anneeId,
+        undefined,
+        classeId,
+        optionId
+      );
+
+      // Filtrer sur les écoles sélectionnées
+      const selectedRankings = rankings.filter(r => selectedSchools.includes(r.id));
+
+      // Préparer les données pour le graphique barres
+      setComparisonData({
+        labels: selectedRankings.map(r => r.nom),
+        datasets: [
+          {
+            label: 'Moyenne générale',
+            data: selectedRankings.map(r => r.moyenne),
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+          },
+          {
+            label: 'Taux de réussite (%)',
+            data: selectedRankings.map(r => r.tauxReussite),
+            backgroundColor: 'rgba(16, 185, 129, 0.6)',
+          }
+        ]
+      });
+
+      // Préparer les détails pour la table
+      setComparisonDetails(selectedRankings.map(r => ({
+        school: r.nom,
+        avgScore: r.moyenne,
+        successRate: r.tauxReussite,
+        topStudent: r.topStudent || '-', // à adapter si dispo dans l'API
+        genderBalance: r.genderBalance || '-', // à adapter si dispo dans l'API
+        ranking: r.rang
+      })));
+
+      // Préparer les données de tendance (évolution sur 5 ans)
+      const trendLabels: string[] = [];
+      const trendDatasets: any[] = [];
+      for (const schoolId of selectedSchools) {
+        const school = schools.find(s => s.id === schoolId);
+        if (!school) continue;
+        const data: number[] = [];
+        for (let i = 4; i >= 0; i--) {
+          const yearObj = years.find(y => Number(y.id) === anneeId - i);
+          if (yearObj) {
+            const yearRankings: SchoolRankingData[] = await CalculationService.getSchoolRankings(
+              Number(yearObj.id),
+              undefined,
+              classeId,
+              optionId
+            );
+            const schoolYear = yearRankings.find(r => r.id === schoolId);
+            data.push(schoolYear ? schoolYear.moyenne : 0);
+            if (trendLabels.length < 5) trendLabels.push(yearObj.libelle);
+          }
+        }
+        trendDatasets.push({
+          label: school.nom,
+          data,
+          borderColor: `hsl(${Math.random() * 360}, 70%, 50%)`,
+          backgroundColor: `hsl(${Math.random() * 360}, 70%, 90%)`
+        });
       }
-    ],
-  };
+      setTrendData({
+        labels: trendLabels,
+        datasets: trendDatasets
+      });
+    };
+    fetchData();
+    // eslint-disable-next-line
+  }, [selectedSchools, selectedClass, selectedOption, selectedYear, schools, years]);
 
-  // Sample detailed comparison data
-  const comparisonDetails = [
-    { 
-      school: 'École A', 
-      avgScore: 76, 
-      successRate: 85, 
-      topStudent: 95, 
-      genderBalance: '55% M / 45% F',
-      ranking: 2
-    },
-    { 
-      school: 'École B', 
-      avgScore: 68, 
-      successRate: 72, 
-      topStudent: 88, 
-      genderBalance: '48% M / 52% F',
-      ranking: 3
-    },
-    { 
-      school: 'École C', 
-      avgScore: 82, 
-      successRate: 90, 
-      topStudent: 98, 
-      genderBalance: '50% M / 50% F',
-      ranking: 1
-    },
-  ];
-
-  // Table columns
+  // Colonnes du tableau
   const columns = [
     { key: 'school', header: 'École' },
     { key: 'avgScore', header: 'Moyenne' },
@@ -110,11 +142,12 @@ function CompareSchools() {
     },
   ];
 
-  const handleSchoolToggle = (school: string) => {
-    if (selectedSchools.includes(school)) {
-      setSelectedSchools(selectedSchools.filter(s => s !== school));
+  // Sélectionner/désélectionner une école
+  const handleSchoolToggle = (schoolId: number) => {
+    if (selectedSchools.includes(schoolId)) {
+      setSelectedSchools(selectedSchools.filter(s => s !== schoolId));
     } else if (selectedSchools.length < 3) {
-      setSelectedSchools([...selectedSchools, school]);
+      setSelectedSchools([...selectedSchools, schoolId]);
     }
   };
 
@@ -134,15 +167,15 @@ function CompareSchools() {
           <div className="flex flex-wrap gap-2">
             {schools.map((school) => (
               <button
-                key={school}
-                onClick={() => handleSchoolToggle(school)}
+                key={school.id}
+                onClick={() => handleSchoolToggle(school.id)}
                 className={`px-4 py-2 rounded-full text-sm ${
-                  selectedSchools.includes(school)
+                  selectedSchools.includes(school.id)
                     ? 'bg-blue-100 text-blue-800 border-2 border-blue-300'
                     : 'bg-gray-100 text-gray-800 border border-gray-300'
                 }`}
               >
-                {school}
+                {school.nom}
               </button>
             ))}
           </div>
@@ -159,9 +192,9 @@ function CompareSchools() {
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Toutes les classes</option>
-              {classes.filter(c => c !== 'Tous').map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
+              {classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.nom}
                 </option>
               ))}
             </select>
@@ -177,9 +210,9 @@ function CompareSchools() {
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Toutes les options</option>
-              {options.filter(o => o !== 'Tous').map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {options.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.nom}
                 </option>
               ))}
             </select>
@@ -194,9 +227,10 @@ function CompareSchools() {
               onChange={(e) => setSelectedYear(e.target.value)}
               className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
+              <option value="">Toutes les années</option>
               {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
+                <option key={year.id} value={year.id}>
+                  {year.libelle}
                 </option>
               ))}
             </select>

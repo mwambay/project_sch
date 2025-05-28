@@ -33,6 +33,10 @@ function SchoolRankings() {
   const [schools, setSchools] = useState<SchoolRankingData[]>([]);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
 
+  // Résumé IA
+  const [iaSummary, setIaSummary] = useState('');
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+
   // Villes
   const cities = ['Toutes', 'Kolwezi', 'Lubumbashi', 'Likasi', 'Fungurume', 'Kambove'];
 
@@ -210,6 +214,50 @@ function SchoolRankings() {
       setIsSmartLoading(false);
     }
   };
+
+  const generateIaSummary = async () => {
+    setIsSummaryLoading(true);
+    try {
+      // Prépare la liste détaillée des écoles
+      const details = schools.map(s =>
+        `- ${s.nom} (${s.ville}) : moyenne ${s.moyenne?.toFixed(2)}, taux de réussite ${s.tauxReussite?.toFixed(1)}%`
+      ).join('\n');
+
+      // Prompt enrichi pour Gemini
+      const prompt = `
+Voici les résultats du classement des écoles selon les filtres :
+ville = ${selectedCity || 'toutes'}, 
+genre = ${selectedGenre || 'tous'}, 
+année = ${years.find(y => y.id.toString() === selectedYear)?.libelle || 'toutes'}, 
+classe = ${classes.find(c => c.id.toString() === selectedClass)?.nom || 'toutes'}, 
+option = ${options.find(o => o.id.toString() === selectedOption)?.nom || 'toutes'}.
+
+Nombre d'écoles trouvées : ${schools.length}.
+
+Détails :
+${details}
+
+Fais un résumé en 2-3 phrases sur la performance générale, la diversité, et propose une recommandation personnalisée pour un parent qui cherche la meilleure école selon ces résultats.
+Utilise un ton positif, moderne et dynamique.
+    `;
+
+      const response = await GeminiService.getSummary(prompt);
+      setIaSummary(typeof response === 'string' ? response : JSON.stringify(response));
+    } catch (e) {
+      setIaSummary("Résumé IA indisponible pour le moment.");
+    }
+    setIsSummaryLoading(false);
+  };
+
+  // Génération automatique du résumé IA lorsque les résultats changent
+  useEffect(() => {
+    if (schools.length > 0) {
+      generateIaSummary();
+    } else {
+      setIaSummary('');
+    }
+    // eslint-disable-next-line
+  }, [selectedCity, selectedClass, selectedOption, selectedYear, selectedGenre, schools]);
 
   return (
     <div className="space-y-6 animate__animated animate__fadeIn relative overflow-hidden">
@@ -439,6 +487,24 @@ function SchoolRankings() {
         </div>
       </Card>
 
+      {/* Résumé IA placé AVANT les résultats */}
+      {(isSummaryLoading || iaSummary) && (
+        <div className="relative my-6 animate__animated animate__fadeInUp">
+          <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border-l-4 border-blue-400 rounded-xl shadow-lg px-6 py-4 flex items-center gap-4 overflow-hidden">
+            <Sparkles className="text-purple-400 animate-pulse flex-shrink-0" size={32} />
+            <div>
+              <div className="font-semibold text-blue-700 mb-1 flex items-center gap-2">
+                <span>Résumé IA</span>
+                {isSummaryLoading && <span className="animate-spin ml-2"><Sparkles size={18} /></span>}
+              </div>
+              <div className="text-gray-700 text-base animate__animated animate__fadeIn">
+                {isSummaryLoading ? "Génération du résumé en cours..." : iaSummary}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {globalStats && (
         <Card title="Statistiques générales">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate__animated animate__fadeIn">
@@ -515,6 +581,7 @@ function SchoolRankings() {
           </p>
         </div>
       </Card>
+
       <style>{`
         .animate__animated { animation-duration: 0.7s; }
         .animate-spin-slow { animation: spin 2s linear infinite; }
@@ -530,6 +597,11 @@ function SchoolRankings() {
           50% { filter: blur(16px) brightness(1.5);}
           100% { filter: blur(64px) brightness(1);}
         }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(30px);}
+          to { opacity: 1; transform: translateY(0);}
+        }
+        .animate__fadeInUp { animation: fadeInUp 0.7s; }
       `}</style>
     </div>
   );
